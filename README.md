@@ -1,4 +1,4 @@
-# LRC Studio
+# LRC AI Studio
 
 一个参考 [Flare-Sky/LRCMaker-AI-Backend](https://github.com/Flare-Sky/LRCMaker-AI-Backend) 工作流、但不依赖浏览器插件的本地 LRC 歌词生成工具。
 
