@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <title>LRC Studio · 本地歌词打轴</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080c17;
+      --panel: #101727;
+      --panel-2: #141d31;
+      --panel-3: #1a2640;
+      --line: rgba(160, 181, 226, .14);
+      --line-strong: rgba(160, 181, 226, .24);
+      --text: #f0f4ff;
+      --muted: #91a0bc;
+      --muted-2: #64728d;
+      --blue: #6b8cff;
+      --blue-2: #879eff;
+      --cyan: #56d7e9;
+      --green: #54d5a1;
+      --yellow: #f4c86a;
+      --red: #ff7786;
+      --shadow: 0 18px 55px rgba(0, 0, 0, .28);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); }
+    body {
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      letter-spacing: .01em;
+      overflow-x: hidden;
+    }
+    button, input, textarea, select { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+      outline: 2px solid rgba(107, 140, 255, .75);
+      outline-offset: 2px;
+    }
+    ::selection { background: rgba(107, 140, 255, .34); }
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #283652; border-radius: 20px; border: 2px solid var(--bg); }
+
+    .app-shell { min-height: 100vh; display: grid; grid-template-columns: 268px minmax(0, 1fr); }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; padding: 25px 18px 20px;
+      background: linear-gradient(180deg, #0c1222 0%, #0a0f1d 100%);
+      border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 18px;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 9px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 35px; height: 35px; border-radius: 11px;
+      color: #fff; font-size: 20px; font-weight: 700;
+      background: linear-gradient(135deg, #738eff, #4fcbd9); box-shadow: 0 8px 22px rgba(82, 153, 255, .28);
+    }
+    .brand strong { display: block; font-size: 15px; letter-spacing: .04em; }
+    .brand span { display: block; color: var(--muted-2); font-size: 10px; margin-top: 3px; letter-spacing: .08em; text-transform: uppercase; }
+    .side-label { color: var(--muted-2); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 0 8px; }
+    .side-group { display: flex; flex-direction: column; gap: 9px; }
+    .project-fields { padding: 14px 12px; background: rgba(20, 29, 49, .72); border: 1px solid var(--line); border-radius: 14px; }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 11px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { color: var(--muted); font-size: 11px; }
+    .field input, .select {
+      width: 100%; border: 1px solid transparent; border-radius: 9px; padding: 9px 10px;
+      color: var(--text); background: #0c1425; transition: border-color .18s, background .18s;
+    }
+    .field input::placeholder { color: #4f5f7c; }
+    .field input:hover, .field input:focus { border-color: var(--line-strong); background: #101a2e; }
+    .drop-zone {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 142px;
+      padding: 17px 13px; text-align: center; border: 1px dashed #3e527c; border-radius: 14px;
+      background: radial-gradient(circle at 50% 0%, rgba(91, 123, 237, .16), transparent 64%), rgba(14, 22, 39, .8);
+      cursor: pointer; transition: border-color .2s, transform .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: var(--blue); background: radial-gradient(circle at 50% 0%, rgba(91, 123, 237, .28), transparent 68%), rgba(17, 29, 53, .9); transform: translateY(-1px); }
+    .drop-icon { color: var(--cyan); font-size: 24px; line-height: 1; margin-bottom: 9px; }
+    .drop-zone strong { font-size: 13px; }
+    .drop-zone span { color: var(--muted-2); font-size: 11px; line-height: 1.55; margin-top: 6px; }
+    .audio-file-name { color: var(--blue-2) !important; max-width: 205px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .side-hint { display: flex; gap: 8px; padding: 10px 9px; color: var(--muted-2); font-size: 11px; line-height: 1.55; }
+    .side-hint b { color: var(--green); font-size: 14px; line-height: 1; }
+    .sidebar-footer { margin-top: auto; color: #465675; font-size: 10px; line-height: 1.6; padding: 0 8px; }
+
+    .main { min-width: 0; padding: 0 36px 50px; background: radial-gradient(circle at 70% -10%, rgba(41, 71, 146, .18), transparent 34%), var(--bg); }
+    .topbar { height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid rgba(160, 181, 226, .08); }
+    .breadcrumbs { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+    .breadcrumbs b { color: var(--text); font-weight: 600; }
+    .breadcrumbs .dot { width: 4px; height: 4px; border-radius: 50%; background: #44557a; }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .button {
+      border: 1px solid var(--line-strong); border-radius: 9px; padding: 9px 13px; background: rgba(20, 29, 49, .72);
+      cursor: pointer; font-size: 12px; font-weight: 600; transition: transform .16s, background .16s, border-color .16s, opacity .16s;
+    }
+    .button:hover:not(:disabled) { transform: translateY(-1px); background: #1b2946; border-color: #4e6597; }
+    .button:active:not(:disabled) { transform: translateY(0); }
+    .button:disabled { opacity: .42; cursor: not-allowed; }
+    .button.primary { border-color: transparent; background: linear-gradient(135deg, #6687ff, #5870e6); box-shadow: 0 8px 24px rgba(87, 111, 230, .2); }
+    .button.primary:hover:not(:disabled) { background: linear-gradient(135deg, #7897ff, #637af3); }
+    .button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+    .button.ghost:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,.05); border-color: transparent; }
+    .button.ai { color: #b9c7ff; border-color: rgba(129, 145, 255, .35); background: rgba(91, 109, 224, .11); }
+    .button.ai:hover:not(:disabled) { background: rgba(91, 109, 224, .22); border-color: #6b80ed; }
+    .button .icon { margin-right: 5px; }
+    .top-ai-dot { width: 6px; height: 6px; display: inline-block; border-radius: 50%; background: var(--yellow); vertical-align: middle; margin-right: 6px; }
+
+    .page-intro { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; padding: 35px 2px 27px; }
+    .eyebrow { color: var(--cyan); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 8px 0 8px; font-size: clamp(25px, 3vw, 36px); line-height: 1.14; letter-spacing: -.035em; }
+    .subtitle { max-width: 590px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .steps { display: flex; align-items: center; gap: 8px; padding-bottom: 3px; color: var(--muted-2); white-space: nowrap; }
+    .step { display: flex; align-items: center; gap: 7px; font-size: 11px; }
+    .step-number { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; border: 1px solid #3a4a6d; font-size: 10px; font-weight: 700; }
+    .step.done .step-number, .step.current .step-number { color: #fff; border-color: var(--blue); background: var(--blue); box-shadow: 0 0 0 4px rgba(107, 140, 255, .11); }
+    .step.current { color: var(--text); }
+    .step-join { width: 29px; height: 1px; background: #2a3857; }
+
+    .card { background: linear-gradient(145deg, rgba(19, 28, 48, .96), rgba(13, 20, 35, .96)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .audio-card { overflow: hidden; }
+    .card-head { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 17px; border-bottom: 1px solid var(--line); }
+    .card-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .card-title-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: var(--cyan); background: rgba(86, 215, 233, .1); }
+    .card-title strong { display: block; font-size: 13px; }
+    .card-title span { display: block; color: var(--muted-2); font-size: 10px; margin-top: 2px; }
+    .audio-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: 11px; }
+    .audio-meta .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); }
+    .audio-meta.ready .status-dot { background: var(--green); box-shadow: 0 0 0 4px rgba(84, 213, 161, .09); }
+    .audio-meta strong { color: var(--text); font-weight: 600; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wave-wrap { position: relative; height: 135px; padding: 17px 18px 8px; cursor: pointer; }
+    #waveform { width: 100%; height: 100%; display: block; border-radius: 10px; }
+    .wave-empty { position: absolute; inset: 18px 18px 9px; display: grid; place-items: center; color: #475775; border: 1px dashed rgba(109, 130, 175, .2); border-radius: 10px; pointer-events: none; }
+    .wave-empty span { font-size: 11px; }
+    .audio-controls { display: flex; align-items: center; gap: 9px; padding: 9px 17px 15px; }
+    .play-button { display: grid; place-items: center; width: 37px; height: 37px; border: 0; border-radius: 50%; color: #fff; background: var(--blue); cursor: pointer; box-shadow: 0 5px 16px rgba(107, 140, 255, .3); transition: transform .15s, background .15s; }
+    .play-button:hover { transform: scale(1.04); background: var(--blue-2); }
+    .transport-button { width: 31px; height: 31px; padding: 0; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; }
+    .transport-button:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .time-readout { min-width: 95px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
+    .time-readout b { color: var(--text); font-weight: 600; }
+    .progress-track { position: relative; flex: 1; height: 5px; background: #24324f; border-radius: 5px; cursor: pointer; }
+    .progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+    .progress-thumb { position: absolute; top: 50%; left: 0; width: 12px; height: 12px; border: 2px solid #dce4ff; border-radius: 50%; background: var(--blue); transform: translate(-50%, -50%); box-shadow: 0 0 0 4px rgba(107, 140, 255, .16); }
+    .speed-select { border: 1px solid var(--line); border-radius: 7px; padding: 6px 7px; color: var(--muted); background: transparent; font-size: 11px; }
+
+    .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) 265px; gap: 18px; margin-top: 18px; align-items: start; }
+    .editor-card { min-width: 0; overflow: hidden; }
+    .editor-head-actions { display: flex; align-items: center; gap: 5px; }
+    .line-count { color: var(--muted-2); font-size: 11px; margin-right: 5px; }
+    .mini-button { border: 1px solid transparent; border-radius: 7px; padding: 7px 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
+    .mini-button:hover:not(:disabled) { color: var(--text); border-color: var(--line); background: rgba(255,255,255,.04); }
+    .mini-button:disabled { opacity: .4; cursor: not-allowed; }
+    .empty-editor { padding: 30px 33px 34px; }
+    .empty-editor-top { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 15px; }
+    .empty-icon { display: grid; place-items: center; flex: 0 0 auto; width: 37px; height: 37px; border-radius: 11px; color: var(--blue-2); background: rgba(107, 140, 255, .12); font-size: 19px; }
+    .empty-editor h2 { margin: 0 0 5px; font-size: 15px; }
+    .empty-editor p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    #lyricsSource { display: block; width: 100%; min-height: 205px; resize: vertical; border: 1px solid var(--line); border-radius: 11px; padding: 13px 14px; color: #d8e0f4; background: #0b1324; line-height: 1.75; font-size: 13px; }
+    #lyricsSource::placeholder { color: #50617e; }
+    .source-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+    .source-tip { color: var(--muted-2); font-size: 11px; line-height: 1.5; margin-left: auto; }
+
+    .editor-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 15px; border-bottom: 1px solid var(--line); background: rgba(13, 20, 35, .55); }
+    .tool-left, .tool-right { display: flex; align-items: center; gap: 6px; }
+    .mark-guide { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+    .keycap { display: inline-grid; place-items: center; min-width: 21px; height: 19px; padding: 0 5px; border: 1px solid #3c4d72; border-bottom-width: 2px; border-radius: 5px; color: #c4cff0; background: #111b2f; font-size: 10px; }
+    .mark-button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 8px; padding: 8px 11px; color: #fff; background: linear-gradient(135deg, #2baebd, #4688e6); cursor: pointer; font-size: 11px; font-weight: 700; box-shadow: 0 5px 16px rgba(63, 157, 213, .16); }
+    .mark-button:hover { filter: brightness(1.1); }
+    .mark-button.marking { background: linear-gradient(135deg, #eb9c55, #db5f77); }
+    .lines-list { min-height: 100px; max-height: 510px; overflow-y: auto; padding: 7px 8px 10px; }
+    .lines-list:focus-within { scrollbar-color: #3c5080 transparent; }
+    .line-row { display: grid; grid-template-columns: 30px 92px minmax(0, 1fr) 43px 29px; align-items: center; gap: 7px; min-height: 48px; padding: 5px 7px; border: 1px solid transparent; border-radius: 10px; transition: background .15s, border-color .15s; }
+    .line-row:hover { background: rgba(43, 58, 92, .32); }
+    .line-row.active { background: linear-gradient(90deg, rgba(88, 118, 226, .22), rgba(88, 118, 226, .06)); border-color: rgba(107, 140, 255, .35); }
+    .line-row.selected { box-shadow: inset 3px 0 0 var(--cyan); }
+    .line-number { color: #536480; font-size: 10px; text-align: center; font-variant-numeric: tabular-nums; }
+    .line-row.active .line-number { color: var(--cyan); }
+    .time-input, .lyric-input { width: 100%; height: 31px; border: 1px solid transparent; border-radius: 7px; color: #d6def3; background: rgba(9, 16, 29, .55); font-size: 12px; transition: border-color .16s, background .16s; }
+    .time-input { padding: 0 7px; color: var(--cyan); font-variant-numeric: tabular-nums; }
+    .lyric-input { padding: 0 8px; color: var(--text); }
+    .time-input:hover, .time-input:focus, .lyric-input:hover, .lyric-input:focus { border-color: #405681; background: #101c32; }
+    .mark-line-button, .delete-line-button { width: 31px; height: 29px; padding: 0; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; }
+    .mark-line-button:hover { color: var(--cyan); background: rgba(86, 215, 233, .1); }
+    .delete-line-button:hover { color: var(--red); background: rgba(255, 119, 134, .1); }
+    .empty-lines { padding: 32px 15px; text-align: center; color: var(--muted-2); font-size: 12px; }
+    .editor-foot { display: flex; justify-content: space-between; gap: 10px; padding: 10px 16px 13px; color: var(--muted-2); font-size: 10px; line-height: 1.55; border-top: 1px solid var(--line); }
+    .editor-foot b { color: var(--muted); font-weight: 500; }
+
+    .side-column { display: flex; flex-direction: column; gap: 18px; }
+    .help-card { padding: 17px; }
+    .help-card h3 { margin: 0 0 13px; font-size: 13px; }
+    .help-list { display: flex; flex-direction: column; gap: 13px; margin: 0; padding: 0; list-style: none; }
+    .help-list li { display: grid; grid-template-columns: 22px 1fr; gap: 9px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .help-list i { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 7px; color: var(--blue-2); background: rgba(107, 140, 255, .12); font-style: normal; font-size: 10px; font-weight: 700; }
+    .help-list b { color: var(--text); font-weight: 600; }
+    .format-card { padding: 17px; }
+    .format-card h3 { margin: 0 0 12px; font-size: 13px; }
+    .format-preview { margin: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; color: #9eacd0; background: #0b1324; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; line-height: 1.8; white-space: pre-wrap; }
+    .format-note { margin: 10px 0 0; color: var(--muted-2); font-size: 10px; line-height: 1.6; }
+    .ai-card { padding: 16px 17px; border-color: rgba(109, 128, 239, .24); background: radial-gradient(circle at 100% 0%, rgba(100, 115, 239, .14), transparent 70%), rgba(18, 24, 46, .95); }
+    .ai-card h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; font-size: 13px; }
+    .ai-spark { color: #baaaff; }
+    .ai-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+    .ai-status { display: flex; align-items: center; gap: 6px; margin-top: 11px; color: var(--yellow); font-size: 10px; }
+    .ai-status.ok { color: var(--green); }
+    .ai-status .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .toast { position: fixed; right: 25px; bottom: 24px; z-index: 20; max-width: 370px; padding: 12px 15px; border: 1px solid #405681; border-radius: 10px; color: #edf2ff; background: #15223a; box-shadow: var(--shadow); opacity: 0; transform: translateY(12px); pointer-events: none; transition: opacity .22s, transform .22s; font-size: 12px; line-height: 1.5; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { border-color: rgba(84, 213, 161, .45); }
+    .toast.warn { border-color: rgba(244, 200, 106, .5); }
+    .toast.error { border-color: rgba(255, 119, 134, .55); }
+
+    .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(3, 6, 13, .76); backdrop-filter: blur(8px); }
+    .modal-backdrop.hidden { display: none; }
+    .modal { width: min(480px, 100%); border: 1px solid var(--line-strong); border-radius: 17px; background: #121b2e; box-shadow: 0 28px 80px rgba(0,0,0,.52); overflow: hidden; }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 19px 20px 14px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0 0 5px; font-size: 16px; }
+    .modal-head p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .modal-close { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; font-size: 18px; }
+    .modal-close:hover { color: var(--text); background: rgba(255,255,255,.06); }
+    .modal-body { padding: 17px 20px 20px; }
+    .ai-box { padding: 13px; border: 1px solid rgba(107, 140, 255, .22); border-radius: 11px; background: rgba(72, 90, 175, .1); }
+    .ai-box strong { display: block; margin-bottom: 5px; color: #cbd5ff; font-size: 12px; }
+    .ai-box p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+    .ai-box.warn { border-color: rgba(244, 200, 106, .48); background: rgba(137, 101, 35, .12); }
+    .ai-box.error { border-color: rgba(255, 119, 134, .52); background: rgba(137, 42, 65, .12); }
+    .ai-box.success { border-color: rgba(84, 213, 161, .45); background: rgba(38, 120, 91, .12); }
+    .install-code { display: block; margin: 10px 0 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; color: #b6c8ff; background: #0a1222; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .modal-progress { display: none; align-items: center; gap: 9px; margin-top: 14px; color: var(--cyan); font-size: 11px; }
+    .modal-progress.show { display: flex; }
+    .spinner { width: 14px; height: 14px; border: 2px solid rgba(86, 215, 233, .25); border-top-color: var(--cyan); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; }
+
+    @media (max-width: 1050px) {
+      .app-shell { grid-template-columns: 224px minmax(0, 1fr); }
+      .main { padding: 0 23px 40px; }
+      .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+      .side-column { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .app-shell { display: block; }
+      .sidebar { position: static; height: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 15px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { grid-column: 1 / -1; padding: 0 3px 2px; }
+      .side-label { display: none; }
+      .project-fields { grid-column: 1 / -1; }
+      .drop-zone { min-height: 111px; }
+      .side-hint, .sidebar-footer { display: none; }
+      .main { padding: 0 14px 35px; }
+      .topbar { height: auto; min-height: 64px; padding: 10px 0; align-items: flex-start; }
+      .top-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .top-actions .button { padding: 8px 9px; }
+      .page-intro { display: block; padding: 25px 0 20px; }
+      .steps { margin-top: 20px; }
+      .audio-meta strong { max-width: 130px; }
+      .audio-controls { flex-wrap: wrap; }
+      .progress-track { order: 4; flex-basis: 100%; margin-top: 3px; }
+      .workspace-grid { margin-top: 14px; }
+      .side-column { display: flex; }
+      .editor-tools { align-items: flex-start; flex-direction: column; }
+      .tool-left, .tool-right { width: 100%; justify-content: space-between; }
+      .mark-guide { margin-left: auto; }
+      .line-row { grid-template-columns: 25px 83px minmax(0, 1fr) 35px 26px; gap: 4px; padding-left: 4px; padding-right: 4px; }
+      .mark-line-button, .delete-line-button { width: 28px; }
+      .empty-editor { padding: 24px 18px 26px; }
+      .source-tip { display: none; }
+    }
+    @media (max-width: 470px) {
+      .top-actions .button.ai { display: none; }
+      .line-row { grid-template-columns: 23px 76px minmax(0, 1fr) 30px 25px; }
+      .time-input, .lyric-input { font-size: 11px; }
+      .card-head { padding-left: 12px; padding-right: 12px; }
+      .audio-meta { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">♫</div>
+        <div><strong>LRC Studio</strong><span>Local lyric alignment</span></div>
+      </div>
+
+      <div class="side-label">项目资料</div>
+      <div class="project-fields">
+        <div class="field"><label for="titleField">歌曲标题</label><input id="titleField" type="text" placeholder="例如：夜空中最亮的星"></div>
+        <div class="field"><label for="artistField">歌手</label><input id="artistField" type="text" placeholder="可选"></div>
+        <div class="field"><label for="albumField">专辑</label><input id="albumField" type="text" placeholder="可选"></div>
+      </div>
+
+      <div class="side-label">音频文件</div>
+      <label class="drop-zone" id="dropZone" for="audioInput">
+        <input id="audioInput" type="file" accept="audio/*" hidden>
+        <div class="drop-icon">↥</div>
+        <strong>点击选择或拖入音频</strong>
+        <span>MP3 · WAV · M4A · OGG<br>文件只在本机浏览器中处理</span>
+        <span class="audio-file-name" id="audioFileName"></span>
+      </label>
+      <div class="side-hint"><b>⌁</b><span>不需要油猴、浏览器扩展或账号。打开这个页面就能开始。</span></div>
+      <div class="sidebar-footer">LRC Studio v1.0<br>本地优先 · 无上传 · 无追踪</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>工作台</span><span class="dot"></span><b>歌词打轴</b></div>
+        <div class="top-actions">
+          <button class="button ai" id="aiButton"><span class="top-ai-dot"></span>本地 AI 对齐</button>
+          <button class="button" id="importLyricsButton"><span class="icon">＋</span>导入歌词</button>
+          <input id="lyricsFileInput" type="file" accept=".txt,.lrc,text/plain" hidden>
+          <button class="button primary" id="exportButton" disabled><span class="icon">↓</span>导出 LRC</button>
+        </div>
+      </header>
+
+      <section class="page-intro">
+        <div>
+          <div class="eyebrow">Simple · Local · Focused</div>
+          <h1>把歌词，变成有时间的歌词。</h1>
+          <p class="subtitle">先放入音频和歌词，再按空格播放、按 Enter 标记。所有基础功能都在本机浏览器完成，简单打出第一版 LRC。</p>
+        </div>
+        <div class="steps" aria-label="使用步骤">
+          <div class="step done"><span class="step-number">1</span><span>导入</span></div><span class="step-join"></span>
+          <div class="step current"><span class="step-number">2</span><span>打轴</span></div><span class="step-join"></span>
+          <div class="step"><span class="step-number">3</span><span>导出</span></div>
+        </div>
+      </section>
+
+      <section class="card audio-card">
+        <div class="card-head">
+          <div class="card-title"><div class="card-title-icon">◒</div><div><strong>音频预览</strong><span>点击波形任意位置可跳转</span></div></div>
+          <div class="audio-meta" id="audioMeta"><span class="status-dot"></span><span id="audioStatus">还没有音频</span></div>
+        </div>
+        <div class="wave-wrap" id="waveWrap">
+          <canvas id="waveform"></canvas>
+          <div class="wave-empty" id="waveEmpty"><span>导入音频后，这里会出现波形</span></div>
+        </div>
+        <div class="audio-controls">
+          <button class="transport-button" id="backButton" title="后退 5 秒">−5</button>
+          <button class="play-button" id="playButton" title="播放 / 暂停">▶</button>
+          <button class="transport-button" id="forwardButton" title="前进 5 秒">+5</button>
+          <div class="time-readout"><b id="currentTime">00:00.00</b> / <span id="totalTime">00:00.00</span></div>
+          <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressFill"></div><div class="progress-thumb" id="progressThumb"></div></div>
+          <select class="speed-select" id="speedSelect" title="播放速度"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select>
+        </div>
+        <audio id="audioElement" preload="metadata"></audio>
+      </section>
+
+      <div class="workspace-grid">
+        <section class="card editor-card">
+          <div class="card-head">
+            <div class="card-title"><div class="card-title-icon">≡</div><div><strong>歌词时间轴</strong><span>每一行一个时间点，越准越好听</span></div></div>
+            <div class="editor-head-actions"><span class="line-count" id="lineCount">0 行</span><button class="mini-button" id="sampleButton">填充示例</button></div>
+          </div>
+
+          <div class="empty-editor" id="emptyEditor">
+            <div class="empty-editor-top"><div class="empty-icon">✦</div><div><h2>先粘贴纯文本歌词</h2><p>一行歌词对应一行时间轴。也支持直接导入已有的 .lrc 文件继续调整。</p></div></div>
+            <textarea id="lyricsSource" placeholder="把歌词粘贴到这里…&#10;&#10;夜空中最亮的星&#10;是否听清&#10;那仰望的人心底的孤独和叹息"></textarea>
+            <div class="source-actions"><button class="button primary" id="parseButton">解析歌词，开始打轴</button><button class="button ghost" id="sourceSampleButton">使用示例</button><span class="source-tip">支持带 [00:12.34] 时间标签的 LRC</span></div>
+          </div>
+
+          <div id="editorBody" hidden>
+            <div class="editor-tools">
+              <div class="tool-left"><button class="mark-button" id="markButton">▶ 开始连续打轴</button><span class="mark-guide"><span class="keycap">Space</span>播放 <span class="keycap">Enter</span>标记当前行</span></div>
+              <div class="tool-right"><button class="mini-button" id="autoDistributeButton">平均分布</button><button class="mini-button" id="sortButton">按时间排序</button><button class="mini-button" id="addLineButton">＋ 添加一行</button></div>
+            </div>
+            <div class="lines-list" id="linesList"></div>
+            <div class="editor-foot"><span><b>小技巧：</b>点击行可试听；选中后用 ← → 微调 0.1 秒，Shift + ← → 微调 1 秒。</span><span id="selectionHint">未选择</span></div>
+          </div>
+        </section>
+
+        <aside class="side-column">
+          <section class="card help-card">
+            <h3>三步完成</h3>
+            <ol class="help-list">
+              <li><i>1</i><span><b>导入音频</b><br>拖入歌曲，波形会自动生成。</span></li>
+              <li><i>2</i><span><b>导入歌词</b><br>粘贴文本，或导入已有 LRC。</span></li>
+              <li><i>3</i><span><b>播放并标记</b><br>空格播放，Enter 给当前行盖时间。</span></li>
+            </ol>
+          </section>
+          <section class="card format-card">
+            <h3>导出格式</h3>
+            <pre class="format-preview">[ti:歌曲标题]
+[ar:歌手]
+[00:12.34]第一行歌词
+[00:16.78]第二行歌词</pre>
+            <p class="format-note">兼容大多数音乐播放器。导出前可直接编辑每行的时间和文字。</p>
+          </section>
+          <section class="card ai-card">
+            <h3><span class="ai-spark">✦</span> 本地 AI 辅助</h3>
+            <p>可选接入 Whisper 进行自动对齐；不安装 AI 组件也不影响手动打轴。</p>
+            <div class="ai-status" id="aiStatus"><span class="status-dot"></span><span>检测中…</span></div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="modal-backdrop hidden" id="aiModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
+    <section class="modal">
+      <div class="modal-head"><div><h2 id="aiModalTitle">本地 AI 对齐</h2><p>参考 Whisper 本地强制对齐流程，把逐行歌词对到歌曲里。</p></div><button class="modal-close" id="closeAiModal" aria-label="关闭">×</button></div>
+      <div class="modal-body">
+        <div class="ai-box" id="aiAvailableBox"><strong>可选功能，不影响基础使用</strong><p id="aiModalMessage">正在检测本机 AI 组件…</p><code class="install-code" id="installCode">python -m pip install -r requirements-ai.txt</code></div>
+        <div class="modal-progress" id="modalProgress"><span class="spinner"></span><span>正在本地分析音频，歌曲越长需要的时间越久…</span></div>
+        <div class="modal-actions"><button class="button" id="cancelAiButton">取消</button><button class="button primary" id="runAiButton">开始 AI 对齐</button></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (selector) => document.querySelector(selector);
+      const els = {
+        audioInput: $('#audioInput'), dropZone: $('#dropZone'), audioFileName: $('#audioFileName'), audioMeta: $('#audioMeta'), audioStatus: $('#audioStatus'),
+        audioElement: $('#audioElement'), waveform: $('#waveform'), waveWrap: $('#waveWrap'), waveEmpty: $('#waveEmpty'),
+        playButton: $('#playButton'), backButton: $('#backButton'), forwardButton: $('#forwardButton'), speedSelect: $('#speedSelect'),
+        currentTime: $('#currentTime'), totalTime: $('#totalTime'), progressTrack: $('#progressTrack'), progressFill: $('#progressFill'), progressThumb: $('#progressThumb'),
+        titleField: $('#titleField'), artistField: $('#artistField'), albumField: $('#albumField'), importLyricsButton: $('#importLyricsButton'), lyricsFileInput: $('#lyricsFileInput'),
+        lyricsSource: $('#lyricsSource'), parseButton: $('#parseButton'), sourceSampleButton: $('#sourceSampleButton'), sampleButton: $('#sampleButton'),
+        emptyEditor: $('#emptyEditor'), editorBody: $('#editorBody'), linesList: $('#linesList'), lineCount: $('#lineCount'), exportButton: $('#exportButton'),
+        markButton: $('#markButton'), autoDistributeButton: $('#autoDistributeButton'), sortButton: $('#sortButton'), addLineButton: $('#addLineButton'), selectionHint: $('#selectionHint'),
+        toast: $('#toast'), aiButton: $('#aiButton'), aiStatus: $('#aiStatus'), aiModalBackdrop: $('#aiModalBackdrop'), aiAvailableBox: $('#aiAvailableBox'), closeAiModal: $('#closeAiModal'), cancelAiButton: $('#cancelAiButton'), runAiButton: $('#runAiButton'), aiModalMessage: $('#aiModalMessage'), modalProgress: $('#modalProgress')
+      };
+
+      const SAMPLE = `夜空中最亮的星
+是否听清
+那仰望的人心底的孤独和叹息
+夜空中最亮的星
+能否记起
+曾与我同行消失在风里的身影`;
+
+      const state = {
+        audioFile: null,
+        audioUrl: '',
+        duration: 0,
+        lines: [],
+        selectedIndex: -1,
+        activeIndex: -1,
+        marking: false,
+        waveform: [],
+        aiAvailable: false,
+        toastTimer: null
+      };
+
+      function showToast(message, kind = '') {
+        clearTimeout(state.toastTimer);
+        els.toast.textContent = message;
+        els.toast.className = `toast show ${kind}`;
+        state.toastTimer = setTimeout(() => { els.toast.className = 'toast'; }, 3300);
+      }
+
+      function formatClock(seconds) {
+        const value = Math.max(0, Number(seconds) || 0);
+        const minutes = Math.floor(value / 60);
+        const rest = value - minutes * 60;
+        return `${String(minutes).padStart(2, '0')}:${rest.toFixed(2).padStart(5, '0')}`;
+      }
+
+      function formatInputTime(seconds) {
+        const value = Math.max(0, Number(seconds) || 0);
+        const minutes = Math.floor(value / 60);
+        const rest = value - minutes * 60;
+        return `${String(minutes).padStart(2, '0')}:${rest.toFixed(2).padStart(5, '0')}`;
+      }
+
+      function parseTime(value) {
+        const cleaned = String(value || '').trim().replace(/^\[/, '').replace(/\]$/, '');
+        const match = cleaned.match(/^(\d+):([0-5]?\d)(?:[.:](\d{1,3}))?$/);
+        if (!match) return null;
+        const fraction = match[3] ? Number(`0.${match[3]}`) : 0;
+        return Number(match[1]) * 60 + Number(match[2]) + fraction;
+      }
+
+      function lrcTag(seconds) {
+        const value = Math.max(0, Number(seconds) || 0);
+        const minutes = Math.floor(value / 60);
+        let rest = value - minutes * 60;
+        if (rest >= 59.995) { return `[${String(minutes + 1).padStart(2, '0')}:00.00]`; }
+        return `[${String(minutes).padStart(2, '0')}:${rest.toFixed(2).padStart(5, '0')}]`;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+      }
+
+      function setProjectField(key, value) {
+        try { localStorage.setItem(`lrc-studio-${key}`, value); } catch (_) { /* private browsing */ }
+      }
+      function getProjectField(key) {
+        try { return localStorage.getItem(`lrc-studio-${key}`) || ''; } catch (_) { return ''; }
+      }
+      ['title', 'artist', 'album'].forEach((key) => {
+        const field = els[`${key}Field`];
+        field.value = getProjectField(key);
+        field.addEventListener('input', () => setProjectField(key, field.value));
+      });
+
+      function renderEditor() {
+        const hasLines = state.lines.length > 0;
+        els.emptyEditor.hidden = hasLines;
+        els.editorBody.hidden = !hasLines;
+        els.exportButton.disabled = !hasLines;
+        els.autoDistributeButton.disabled = !hasLines;
+        els.sortButton.disabled = !hasLines;
+        els.addLineButton.disabled = !hasLines;
+        els.markButton.disabled = !hasLines || !state.audioFile;
+        els.lineCount.textContent = `${state.lines.length} 行`;
+        if (!hasLines) return;
+
+        els.linesList.innerHTML = state.lines.map((line, index) => {
+          const active = index === state.activeIndex ? ' active' : '';
+          const selected = index === state.selectedIndex ? ' selected' : '';
+          const timestamp = line.time == null ? '--:--.--' : formatInputTime(line.time);
+          return `<div class="line-row${active}${selected}" data-index="${index}">
+            <span class="line-number">${String(index + 1).padStart(2, '0')}</span>
+            <input class="time-input" data-role="time" value="${escapeHtml(timestamp)}" aria-label="第 ${index + 1} 行时间">
+            <input class="lyric-input" data-role="text" value="${escapeHtml(line.text)}" aria-label="第 ${index + 1} 行歌词">
+            <button class="mark-line-button" data-action="mark" title="用当前播放时间标记">⏱</button>
+            <button class="delete-line-button" data-action="delete" title="删除此行">×</button>
+          </div>`;
+        }).join('');
+        if (state.selectedIndex >= 0 && state.selectedIndex < state.lines.length) {
+          els.selectionHint.textContent = `已选第 ${state.selectedIndex + 1} 行`;
+        } else {
+          els.selectionHint.textContent = '未选择';
+        }
+      }
+
+      function selectLine(index, shouldSeek = false) {
+        if (!state.lines.length) return;
+        state.selectedIndex = Math.max(0, Math.min(state.lines.length - 1, index));
+        if (shouldSeek && state.lines[state.selectedIndex].time != null) seekTo(state.lines[state.selectedIndex].time);
+        renderEditor();
+        const row = els.linesList.querySelector(`[data-index="${state.selectedIndex}"]`);
+        if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      function updateActiveLine() {
+        if (!state.lines.length) return;
+        let active = -1;
+        const now = Number(els.audioElement.currentTime) || 0;
+        state.lines.forEach((line, index) => { if (line.time != null && line.time <= now) active = index; });
+        if (active !== state.activeIndex) {
+          state.activeIndex = active;
+          if (!els.editorBody.hidden) {
+            els.linesList.querySelectorAll('.line-row').forEach((row, index) => row.classList.toggle('active', index === active));
+          }
+        }
+      }
+
+      function setLineTime(index, seconds, advance = false) {
+        if (!state.lines[index]) return;
+        state.lines[index].time = Math.max(0, Number(seconds) || 0);
+        if (advance && index < state.lines.length - 1) state.selectedIndex = index + 1;
+        renderEditor();
+      }
+
+      function markSelectedLine() {
+        if (!state.audioFile) { showToast('请先导入音频，再开始标记。', 'warn'); return; }
+        if (!state.lines.length) { showToast('请先导入或粘贴歌词。', 'warn'); return; }
+        if (state.selectedIndex < 0) state.selectedIndex = 0;
+        setLineTime(state.selectedIndex, els.audioElement.currentTime, true);
+        updateActiveLine();
+        if (state.selectedIndex >= state.lines.length - 1) {
+          showToast('最后一行已标记，可以导出 LRC 了。', 'success');
+        }
+      }
+
+      function toggleMarking() {
+        if (!state.audioFile) { showToast('请先导入音频。', 'warn'); return; }
+        if (!state.lines.length) { showToast('请先导入歌词。', 'warn'); return; }
+        state.marking = !state.marking;
+        els.markButton.classList.toggle('marking', state.marking);
+        els.markButton.textContent = state.marking ? '⏹ 停止连续打轴' : '▶ 开始连续打轴';
+        if (state.marking) {
+          if (state.selectedIndex < 0) state.selectedIndex = 0;
+          els.audioElement.play().catch(() => {});
+          showToast('连续打轴已开始：唱到每行开头时按 Enter。');
+        } else {
+          els.audioElement.pause();
+        }
+        renderEditor();
+      }
+
+      function seekTo(seconds) {
+        if (!state.audioFile) return;
+        els.audioElement.currentTime = Math.max(0, Math.min(state.duration || 0, Number(seconds) || 0));
+        renderTransport();
+        updateActiveLine();
+      }
+
+      function renderTransport() {
+        const current = Number(els.audioElement.currentTime) || 0;
+        const duration = state.duration || Number(els.audioElement.duration) || 0;
+        const ratio = duration ? Math.min(1, current / duration) : 0;
+        els.currentTime.textContent = formatClock(current);
+        els.totalTime.textContent = formatClock(duration);
+        els.progressFill.style.width = `${ratio * 100}%`;
+        els.progressThumb.style.left = `${ratio * 100}%`;
+        els.playButton.textContent = els.audioElement.paused ? '▶' : 'Ⅱ';
+        els.playButton.setAttribute('aria-label', els.audioElement.paused ? '播放' : '暂停');
+      }
+
+      function drawWaveform() {
+        const canvas = els.waveform;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(rect.width * dpr);
+        canvas.height = Math.floor(rect.height * dpr);
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const width = rect.width, height = rect.height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#0b1324';
+        ctx.fillRect(0, 0, width, height);
+        const bars = state.waveform.length || Math.max(70, Math.floor(width / 4));
+        for (let i = 0; i < bars; i += 1) {
+          const ratio = bars <= 1 ? 0 : i / (bars - 1);
+          const amplitude = state.waveform.length ? state.waveform[i] : (0.18 + 0.45 * Math.abs(Math.sin(i * 1.7)) * (0.55 + 0.45 * Math.abs(Math.sin(i * .31))));
+          const barHeight = Math.max(3, amplitude * height * .82);
+          const x = ratio * width;
+          const y = (height - barHeight) / 2;
+          const active = ratio <= ((Number(els.audioElement.currentTime) || 0) / (state.duration || 1));
+          ctx.fillStyle = active ? 'rgba(106, 161, 246, .88)' : 'rgba(77, 103, 151, .43)';
+          ctx.beginPath();
+          ctx.roundRect(x, y, Math.max(1, width / bars * .57), barHeight, 2);
+          ctx.fill();
+        }
+        // guide lines make the empty areas look intentional and aid positioning
+        ctx.strokeStyle = 'rgba(152, 174, 222, .08)';
+        ctx.lineWidth = 1;
+        [0.25, 0.5, 0.75].forEach((r) => { ctx.beginPath(); ctx.moveTo(width * r, 0); ctx.lineTo(width * r, height); ctx.stroke(); });
+      }
+
+      async function decodeWaveform(file) {
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) throw new Error('AudioContext unavailable');
+          const context = new AudioContextClass();
+          const buffer = await context.decodeAudioData(await file.arrayBuffer());
+          const channel = buffer.getChannelData(0);
+          const bars = Math.max(90, Math.min(500, Math.floor(els.waveform.getBoundingClientRect().width / 2)));
+          const block = Math.max(1, Math.floor(channel.length / bars));
+          state.waveform = Array.from({ length: bars }, (_, i) => {
+            let peak = 0;
+            const start = i * block;
+            const end = Math.min(channel.length, start + block);
+            for (let j = start; j < end; j += 1) peak = Math.max(peak, Math.abs(channel[j]));
+            return Math.min(1, peak * 1.55);
+          });
+          await context.close();
+        } catch (_) {
+          state.waveform = [];
+        }
+        drawWaveform();
+      }
+
+      function loadAudio(file) {
+        if (!file || !file.type.startsWith('audio/') && !/\.(mp3|wav|m4a|aac|ogg|flac|opus)$/i.test(file.name)) {
+          showToast('请选择音频文件（MP3、WAV、M4A、OGG 等）。', 'error'); return;
+        }
+        if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
+        state.audioFile = file;
+        state.audioUrl = URL.createObjectURL(file);
+        state.duration = 0;
+        state.waveform = [];
+        els.audioElement.src = state.audioUrl;
+        els.audioElement.load();
+        els.audioFileName.textContent = file.name;
+        els.audioStatus.textContent = '正在读取音频…';
+        els.audioMeta.classList.remove('ready');
+        els.waveEmpty.hidden = true;
+        drawWaveform();
+        decodeWaveform(file);
+      }
+
+      function parseLyrics(rawText) {
+        const lines = [];
+        let metadata = { title: '', artist: '', album: '' };
+        const rawLines = String(rawText || '').replace(/^\uFEFF/, '').split(/\r?\n/);
+        rawLines.forEach((rawLine) => {
+          const source = rawLine.trim();
+          if (!source) return;
+          const meta = source.match(/^\[(ti|ar|al):([^\]]*)\]\s*$/i);
+          if (meta) { metadata[{ ti: 'title', ar: 'artist', al: 'album' }[meta[1].toLowerCase()]] = meta[2].trim(); return; }
+          if (/^\[(by|offset|re|ve):/i.test(source)) return;
+          if (source === '---') return;
+          const tags = [...source.matchAll(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g)];
+          let text = source.replace(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g, '').trim();
+          // Credits before the first lyric are useful context but should not
+          // become a sung line; this mirrors the reference project's behavior.
+          if (!tags.length && lines.length === 0 && /^(作词|作曲|编曲|演唱|制作|来源|词|曲)\s*[:：]/.test(text)) return;
+          if (!text) return;
+          if (tags.length) {
+            tags.forEach((tag) => {
+              const fraction = tag[3] ? Number(`0.${tag[3]}`) : 0;
+              lines.push({ time: Number(tag[1]) * 60 + Number(tag[2]) + fraction, text });
+            });
+          } else {
+            lines.push({ time: null, text });
+          }
+        });
+        if (!els.titleField.value && metadata.title) els.titleField.value = metadata.title;
+        if (!els.artistField.value && metadata.artist) els.artistField.value = metadata.artist;
+        if (!els.albumField.value && metadata.album) els.albumField.value = metadata.album;
+        return lines;
+      }
+
+      function loadLyricsText(text, message = '歌词已载入') {
+        const parsed = parseLyrics(text);
+        if (!parsed.length) { showToast('没有找到有效歌词，请至少输入一行文字。', 'error'); return false; }
+        state.lines = parsed;
+        state.selectedIndex = 0;
+        state.activeIndex = -1;
+        state.marking = false;
+        els.markButton.classList.remove('marking');
+els.markButton.textContent = '▶ 开始连续打轴';
+        renderEditor();
+        showToast(`${message}，共 ${parsed.length} 行。`, 'success');
+        return true;
+      }
+
+      function buildLrc() {
+        const valid = state.lines.filter((line) => line.text.trim() && line.time != null).slice().sort((a, b) => a.time - b.time);
+        const missing = state.lines.filter((line) => line.text.trim() && line.time == null).length;
+        if (!valid.length) { showToast('还没有可导出的时间点，请先标记歌词。', 'warn'); return null; }
+        if (missing) showToast(`还有 ${missing} 行没有时间点，本次将跳过它们。`, 'warn');
+        const output = [];
+        const title = els.titleField.value.trim(), artist = els.artistField.value.trim(), album = els.albumField.value.trim();
+        if (title) output.push(`[ti:${title}]`);
+        if (artist) output.push(`[ar:${artist}]`);
+        if (album) output.push(`[al:${album}]`);
+        output.push(...valid.map((line) => `${lrcTag(line.time)}${line.text.trim()}`));
+        return output.join('\n') + '\n';
+      }
+
+      function downloadText(filename, text) {
+        const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function safeFilename() {
+        const title = (els.titleField.value.trim() || (state.audioFile ? state.audioFile.name.replace(/\.[^.]+$/, '') : 'lyrics')).replace(/[\\/:*?"<>|]/g, '_');
+        return `${title}.lrc`;
+      }
+
+      function readTextFile(file) {
+        return file.arrayBuffer().then((buffer) => {
+          let text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+          if ((text.match(/�/g) || []).length > Math.max(2, text.length / 100)) {
+            try { text = new TextDecoder('gb18030').decode(buffer); } catch (_) { /* UTF-8 is fine */ }
+          }
+          return text;
+        });
+      }
+
+      async function checkAi() {
+        try {
+          const response = await fetch('/api/ping', { cache: 'no-store' });
+          const data = await response.json();
+          state.aiAvailable = !!data.ai_available;
+          els.aiStatus.classList.toggle('ok', state.aiAvailable);
+          els.aiStatus.innerHTML = state.aiAvailable
+            ? '<span class="status-dot"></span><span>Whisper 已就绪</span>'
+            : '<span class="status-dot"></span><span>基础模式可用 · AI 未安装</span>';
+        } catch (_) {
+          els.aiStatus.innerHTML = '<span class="status-dot"></span><span>本地服务连接正常</span>';
+        }
+      }
+
+      function setAiModalMessage(message, kind = '') {
+        els.aiModalMessage.textContent = message;
+        els.aiAvailableBox.classList.remove('warn', 'error', 'success');
+        if (kind) els.aiAvailableBox.classList.add(kind);
+      }
+
+      function openAiModal() {
+        els.aiModalBackdrop.classList.remove('hidden');
+        els.modalProgress.classList.remove('show');
+        if (!state.aiAvailable) {
+          setAiModalMessage('当前使用的是零依赖基础模式。若要启用自动对齐，请在项目目录执行下面的命令，安装后重新启动。', 'warn');
+          els.runAiButton.disabled = true;
+        } else {
+          setAiModalMessage('检测到 Whisper，可以把当前音频和歌词在本机进行自动对齐。');
+          els.runAiButton.disabled = false;
+        }
+      }
+      function closeAiModal() { if (!els.modalProgress.classList.contains('show')) els.aiModalBackdrop.classList.add('hidden'); }
+
+      async function runAiAlignment() {
+        // Keep validation inside the modal. A toast behind the modal looks like
+        // a dead button, especially on a short or narrow screen.
+        if (!state.audioFile) {
+          setAiModalMessage('请先关闭此窗口并导入音频文件，然后再开始 AI 对齐。', 'warn');
+          showToast('请先导入音频。', 'warn');
+          return;
+        }
+        if (!state.lines.length) {
+          setAiModalMessage('请先关闭此窗口并导入或粘贴歌词，然后再开始 AI 对齐。', 'warn');
+          showToast('请先导入歌词。', 'warn');
+          return;
+        }
+        if (!state.aiAvailable) {
+          setAiModalMessage('本机没有检测到 Whisper 组件，请先执行上方命令并重新启动 LRC Studio。', 'warn');
+          return;
+        }
+        const form = new FormData();
+        form.append('audio', state.audioFile, state.audioFile.name);
+        form.append('lyrics', state.lines.map((line) => line.text).join('\n'));
+        form.append('ti', els.titleField.value.trim()); form.append('ar', els.artistField.value.trim()); form.append('al', els.albumField.value.trim());
+        els.runAiButton.disabled = true; els.cancelAiButton.disabled = true; els.modalProgress.classList.add('show');
+        setAiModalMessage('请求已发出，正在本地分析音频；长歌曲可能需要几分钟。');
+        try {
+          const response = await fetch('/api/align', { method: 'POST', body: form });
+          const raw = await response.text();
+          let payload;
+          try { payload = JSON.parse(raw); } catch (_) { throw new Error(`本地服务返回了无效响应（HTTP ${response.status}）`); }
+          if (!response.ok || payload.code !== 200) throw new Error(payload.message || `AI 对齐失败（HTTP ${response.status}）`);
+          const next = parseLyrics(payload.data?.standard_lrc || '');
+          if (!next.length) throw new Error('AI 没有返回可用的歌词时间轴');
+          state.lines = next; state.selectedIndex = 0; state.activeIndex = -1; renderEditor();
+          els.aiModalBackdrop.classList.add('hidden');
+          showToast('AI 对齐完成，可以继续人工微调。', 'success');
+        } catch (error) {
+          setAiModalMessage(`对齐失败：${error.message || '请查看终端日志。'}`, 'error');
+          showToast(error.message || 'AI 对齐失败，请查看终端日志。', 'error');
+        } finally {
+          els.runAiButton.disabled = !state.aiAvailable; els.cancelAiButton.disabled = false; els.modalProgress.classList.remove('show');
+        }
+      }
+
+      // Audio and waveform events
+      els.audioInput.addEventListener('change', (event) => loadAudio(event.target.files[0]));
+      ['dragenter', 'dragover'].forEach((name) => els.dropZone.addEventListener(name, (event) => { event.preventDefault(); els.dropZone.classList.add('dragover'); }));
+      ['dragleave', 'drop'].forEach((name) => els.dropZone.addEventListener(name, (event) => { event.preventDefault(); els.dropZone.classList.remove('dragover'); }));
+      els.dropZone.addEventListener('drop', (event) => loadAudio(event.dataTransfer.files[0]));
+      els.audioElement.addEventListener('loadedmetadata', () => {
+        state.duration = Number(els.audioElement.duration) || 0;
+        els.totalTime.textContent = formatClock(state.duration);
+        els.audioStatus.textContent = `${formatClock(state.duration)} · 已就绪`;
+        els.audioMeta.classList.add('ready');
+        els.markButton.disabled = !state.lines.length;
+        renderTransport(); drawWaveform();
+      });
+      els.audioElement.addEventListener('timeupdate', () => { renderTransport(); updateActiveLine(); drawWaveform(); });
+      els.audioElement.addEventListener('play', renderTransport); els.audioElement.addEventListener('pause', renderTransport);
+      els.audioElement.addEventListener('ended', () => { state.marking = false; els.markButton.classList.remove('marking'); els.markButton.textContent = '▶ 开始连续打轴'; renderTransport(); });
+      els.playButton.addEventListener('click', () => {
+        if (!state.audioFile) { showToast('请先导入音频。', 'warn'); return; }
+        if (els.audioElement.paused) els.audioElement.play().catch(() => showToast('浏览器阻止了播放，请再点击一次播放按钮。', 'warn'));
+        else els.audioElement.pause();
+      });
+      els.backButton.addEventListener('click', () => seekTo((els.audioElement.currentTime || 0) - 5));
+      els.forwardButton.addEventListener('click', () => seekTo((els.audioElement.currentTime || 0) + 5));
+      els.speedSelect.addEventListener('change', () => { els.audioElement.playbackRate = Number(els.speedSelect.value); });
+      function seekFromPointer(event, element) { const rect = element.getBoundingClientRect(); seekTo(((event.clientX - rect.left) / rect.width) * (state.duration || 0)); }
+      els.waveWrap.addEventListener('click', (event) => { if (state.audioFile) seekFromPointer(event, els.waveform); });
+      els.progressTrack.addEventListener('click', (event) => seekFromPointer(event, els.progressTrack));
+      window.addEventListener('resize', drawWaveform);
+
+      // Lyrics import and editing
+      els.importLyricsButton.addEventListener('click', () => els.lyricsFileInput.click());
+      els.lyricsFileInput.addEventListener('change', async (event) => { const file = event.target.files[0]; if (!file) return; loadLyricsText(await readTextFile(file), '歌词文件已导入'); event.target.value = ''; });
+      els.parseButton.addEventListener('click', () => loadLyricsText(els.lyricsSource.value));
+      els.sourceSampleButton.addEventListener('click', () => { els.lyricsSource.value = SAMPLE; showToast('示例歌词已填入，点击解析即可开始。'); });
+      els.sampleButton.addEventListener('click', () => { els.lyricsSource.value = SAMPLE; loadLyricsText(SAMPLE, '示例歌词已载入'); });
+      els.addLineButton.addEventListener('click', () => { state.lines.push({ time: null, text: '新歌词' }); state.selectedIndex = state.lines.length - 1; renderEditor(); setTimeout(() => { const input = els.linesList.querySelector(`[data-index="${state.selectedIndex}"] .lyric-input`); input?.focus(); input?.select(); }, 0); });
+      els.markButton.addEventListener('click', toggleMarking);
+      els.autoDistributeButton.addEventListener('click', () => {
+        if (!state.duration) { showToast('请先导入音频，才能按时长分布。', 'warn'); return; }
+        const count = state.lines.length, usable = Math.max(0, state.duration - Math.min(1.2, state.duration * .04));
+        state.lines.forEach((line, index) => { line.time = count === 1 ? 0 : (usable * index / (count - 1)); });
+        state.selectedIndex = 0; renderEditor(); showToast('已按音频时长平均分布，可再逐行微调。', 'success');
+      });
+      els.sortButton.addEventListener('click', () => { state.lines.sort((a, b) => (a.time == null ? Infinity : a.time) - (b.time == null ? Infinity : b.time)); state.selectedIndex = 0; renderEditor(); showToast('已按时间排序。'); });
+      els.linesList.addEventListener('click', (event) => {
+        const row = event.target.closest('.line-row'); if (!row) return;
+        const index = Number(row.dataset.index);
+        const action = event.target.closest('[data-action]')?.dataset.action;
+        if (action === 'mark') { selectLine(index); setLineTime(index, els.audioElement.currentTime); updateActiveLine(); return; }
+        if (action === 'delete') { state.lines.splice(index, 1); state.selectedIndex = Math.min(index, state.lines.length - 1); renderEditor(); return; }
+        if (event.target.matches('input')) return;
+        selectLine(index, true);
+      });
+      els.linesList.addEventListener('focusin', (event) => { const row = event.target.closest('.line-row'); if (row) selectLine(Number(row.dataset.index)); });
+      els.linesList.addEventListener('input', (event) => {
+        const row = event.target.closest('.line-row'); if (!row) return;
+        const index = Number(row.dataset.index);
+        if (event.target.dataset.role === 'text') state.lines[index].text = event.target.value;
+      });
+      els.linesList.addEventListener('change', (event) => {
+        const row = event.target.closest('.line-row'); if (!row || event.target.dataset.role !== 'time') return;
+        const value = event.target.value.trim();
+        if (!value || value === '--:--.--') { state.lines[Number(row.dataset.index)].time = null; renderEditor(); return; }
+        const time = parseTime(value);
+        if (time == null) { showToast('时间格式应为 00:12.34。', 'error'); renderEditor(); return; }
+        state.lines[Number(row.dataset.index)].time = time; renderEditor();
+      });
+
+      els.exportButton.addEventListener('click', () => { const text = buildLrc(); if (text) { downloadText(safeFilename(), text); showToast(`已导出 ${safeFilename()}`, 'success'); } });
+      els.aiButton.addEventListener('click', openAiModal); els.closeAiModal.addEventListener('click', closeAiModal); els.cancelAiButton.addEventListener('click', closeAiModal); els.runAiButton.addEventListener('click', runAiAlignment);
+      els.aiModalBackdrop.addEventListener('click', (event) => { if (event.target === els.aiModalBackdrop) closeAiModal(); });
+
+      document.addEventListener('keydown', (event) => {
+        const tag = document.activeElement?.tagName;
+        const editing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+        if (event.key === 'Escape' && !els.aiModalBackdrop.classList.contains('hidden')) { closeAiModal(); return; }
+        if (editing) return;
+        if (event.code === 'Space') { event.preventDefault(); els.playButton.click(); }
+        if (event.key === 'Enter' && state.marking) { event.preventDefault(); markSelectedLine(); }
+        if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && state.selectedIndex >= 0 && state.lines[state.selectedIndex]) {
+          event.preventDefault(); const delta = (event.key === 'ArrowLeft' ? -1 : 1) * (event.shiftKey ? 1 : .1);
+          setLineTime(state.selectedIndex, (state.lines[state.selectedIndex].time || 0) + delta);
+        }
+      });
+
+      checkAi(); renderTransport(); drawWaveform();
+    })();
+  </script>
+</body>
+</html>

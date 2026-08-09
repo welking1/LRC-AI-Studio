@@ -1,0 +1,8 @@
+# Optional only. The core LRC Studio editor has no third-party dependencies.
+# These are the local Whisper dependencies used by the optional AI alignment endpoint.
+fastapi
+uvicorn
+python-multipart
+stable-ts
+faster-whisper
+av
