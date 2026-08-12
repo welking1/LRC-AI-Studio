@@ -292,7 +292,9 @@
       <div class="project-fields">
         <div class="field"><label for="titleField">歌曲标题</label><input id="titleField" type="text" placeholder="例如：夜空中最亮的星"></div>
         <div class="field"><label for="artistField">歌手</label><input id="artistField" type="text" placeholder="可选"></div>
-        <div class="field"><label for="albumField">专辑</label><input id="albumField" type="text" placeholder="可选"></div>
+        <div class="field"><label for="albumField">专辑（Albums）</label><input id="albumField" type="text" placeholder="可选"></div>
+        <div class="field"><label for="lyricistField">作词</label><input id="lyricistField" type="text" placeholder="可选"></div>
+        <div class="field"><label for="composerField">作曲</label><input id="composerField" type="text" placeholder="可选"></div>
       </div>
 
       <div class="side-label">音频文件</div>
@@ -385,11 +387,15 @@
           </section>
           <section class="card format-card">
             <h3>导出格式</h3>
-            <pre class="format-preview">[ti:歌曲标题]
-[ar:歌手]
+            <pre class="format-preview">歌曲标题
+歌手
+Albums
+Lyrics: 作词
+Music: 作曲
+
 [00:12.34]第一行歌词
 [00:16.78]第二行歌词</pre>
-            <p class="format-note">兼容大多数音乐播放器。导出前可直接编辑每行的时间和文字。</p>
+            <p class="format-note">按项目资料生成自定义头部，下面接逐行时间标签。导出前可直接编辑每行的时间和文字。</p>
           </section>
           <section class="card ai-card">
             <h3><span class="ai-spark">✦</span> 本地 AI 辅助</h3>
@@ -424,7 +430,7 @@
         audioElement: $('#audioElement'), waveform: $('#waveform'), waveWrap: $('#waveWrap'), waveEmpty: $('#waveEmpty'),
         playButton: $('#playButton'), backButton: $('#backButton'), forwardButton: $('#forwardButton'), speedSelect: $('#speedSelect'),
         currentTime: $('#currentTime'), totalTime: $('#totalTime'), progressTrack: $('#progressTrack'), progressFill: $('#progressFill'), progressThumb: $('#progressThumb'),
-        titleField: $('#titleField'), artistField: $('#artistField'), albumField: $('#albumField'), importLyricsButton: $('#importLyricsButton'), lyricsFileInput: $('#lyricsFileInput'),
+        titleField: $('#titleField'), artistField: $('#artistField'), albumField: $('#albumField'), lyricistField: $('#lyricistField'), composerField: $('#composerField'), importLyricsButton: $('#importLyricsButton'), lyricsFileInput: $('#lyricsFileInput'),
         lyricsSource: $('#lyricsSource'), parseButton: $('#parseButton'), sourceSampleButton: $('#sourceSampleButton'), sampleButton: $('#sampleButton'),
         emptyEditor: $('#emptyEditor'), editorBody: $('#editorBody'), linesList: $('#linesList'), lineCount: $('#lineCount'), exportButton: $('#exportButton'),
         markButton: $('#markButton'), autoDistributeButton: $('#autoDistributeButton'), sortButton: $('#sortButton'), addLineButton: $('#addLineButton'), selectionHint: $('#selectionHint'),
@@ -498,7 +504,7 @@
       function getProjectField(key) {
         try { return localStorage.getItem(`lrc-studio-${key}`) || ''; } catch (_) { return ''; }
       }
-      ['title', 'artist', 'album'].forEach((key) => {
+      ['title', 'artist', 'album', 'lyricist', 'composer'].forEach((key) => {
         const field = els[`${key}Field`];
         field.value = getProjectField(key);
         field.addEventListener('input', () => setProjectField(key, field.value));
@@ -686,17 +692,47 @@
 
       function parseLyrics(rawText) {
         const lines = [];
-        let metadata = { title: '', artist: '', album: '' };
-        const rawLines = String(rawText || '').replace(/^\uFEFF/, '').split(/\r?\n/);
+        const metadata = { title: '', artist: '', album: '', lyricist: '', composer: '' };
+        let rawLines = String(rawText || '').replace(/^\uFEFF/, '').split(/\r?\n/);
+
+        // Also understand the custom exported header:
+        // title / artist / album / Lyrics: lyricist / Music: composer.
+        // Keep the first three positions even when a project field is empty.
+        let header = rawLines.slice(0, 5).map((line) => line.trim());
+        let headerStart = 0;
+        if (!(header.length === 5 && header[3].match(/^Lyrics\s*:/i) && header[4].match(/^Music\s*:/i))) {
+          const firstContent = rawLines.findIndex((line) => line.trim());
+          if (firstContent >= 0) {
+            headerStart = firstContent;
+            header = rawLines.slice(firstContent, firstContent + 5).map((line) => line.trim());
+          }
+        }
+        if (header.length === 5 && header[3].match(/^Lyrics\s*:/i) && header[4].match(/^Music\s*:/i)
+            && !header[0].match(/^\[/) && !header[1].match(/^\[/) && !header[2].match(/^\[/)) {
+          [metadata.title, metadata.artist, metadata.album] = header.slice(0, 3);
+          metadata.lyricist = header[3].replace(/^Lyrics\s*:/i, '').trim();
+          metadata.composer = header[4].replace(/^Music\s*:/i, '').trim();
+          rawLines.splice(headerStart, 5);
+        }
+
         rawLines.forEach((rawLine) => {
           const source = rawLine.trim();
           if (!source) return;
-          const meta = source.match(/^\[(ti|ar|al):([^\]]*)\]\s*$/i);
-          if (meta) { metadata[{ ti: 'title', ar: 'artist', al: 'album' }[meta[1].toLowerCase()]] = meta[2].trim(); return; }
-          if (/^\[(by|offset|re|ve):/i.test(source)) return;
+          const meta = source.match(/^\[(ti|ar|al|by|ly|mu):([^\]]*)\]\s*$/i);
+          if (meta) {
+            const key = { ti: 'title', ar: 'artist', al: 'album', by: 'lyricist', ly: 'lyricist', mu: 'composer' }[meta[1].toLowerCase()];
+            if (key) metadata[key] = meta[2].trim();
+            return;
+          }
+          const customMeta = source.match(/^(Lyrics|Music)\s*:\s*(.*)$/i);
+          if (customMeta) {
+            metadata[customMeta[1].toLowerCase() === 'lyrics' ? 'lyricist' : 'composer'] = customMeta[2].trim();
+            return;
+          }
+          if (/^\[(offset|re|ve):/i.test(source)) return;
           if (source === '---') return;
           const tags = [...source.matchAll(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g)];
-          let text = source.replace(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g, '').trim();
+          const text = source.replace(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g, '').trim();
           // Credits before the first lyric are useful context but should not
           // become a sung line; this mirrors the reference project's behavior.
           if (!tags.length && lines.length === 0 && /^(作词|作曲|编曲|演唱|制作|来源|词|曲)\s*[:：]/.test(text)) return;
@@ -713,6 +749,8 @@
         if (!els.titleField.value && metadata.title) els.titleField.value = metadata.title;
         if (!els.artistField.value && metadata.artist) els.artistField.value = metadata.artist;
         if (!els.albumField.value && metadata.album) els.albumField.value = metadata.album;
+        if (!els.lyricistField.value && metadata.lyricist) els.lyricistField.value = metadata.lyricist;
+        if (!els.composerField.value && metadata.composer) els.composerField.value = metadata.composer;
         return lines;
       }
 
@@ -735,11 +773,9 @@ els.markButton.textContent = '▶ 开始连续打轴';
         const missing = state.lines.filter((line) => line.text.trim() && line.time == null).length;
         if (!valid.length) { showToast('还没有可导出的时间点，请先标记歌词。', 'warn'); return null; }
         if (missing) showToast(`还有 ${missing} 行没有时间点，本次将跳过它们。`, 'warn');
-        const output = [];
         const title = els.titleField.value.trim(), artist = els.artistField.value.trim(), album = els.albumField.value.trim();
-        if (title) output.push(`[ti:${title}]`);
-        if (artist) output.push(`[ar:${artist}]`);
-        if (album) output.push(`[al:${album}]`);
+        const lyricist = els.lyricistField.value.trim(), composer = els.composerField.value.trim();
+        const output = [title, artist, album, `Lyrics: ${lyricist}`, `Music: ${composer}`, ''];
         output.push(...valid.map((line) => `${lrcTag(line.time)}${line.text.trim()}`));
         return output.join('\n') + '\n';
       }
@@ -820,6 +856,7 @@ els.markButton.textContent = '▶ 开始连续打轴';
         form.append('audio', state.audioFile, state.audioFile.name);
         form.append('lyrics', state.lines.map((line) => line.text).join('\n'));
         form.append('ti', els.titleField.value.trim()); form.append('ar', els.artistField.value.trim()); form.append('al', els.albumField.value.trim());
+        form.append('lyricist', els.lyricistField.value.trim()); form.append('composer', els.composerField.value.trim());
         els.runAiButton.disabled = true; els.cancelAiButton.disabled = true; els.modalProgress.classList.add('show');
         setAiModalMessage('请求已发出，正在本地分析音频；长歌曲可能需要几分钟。');
         try {

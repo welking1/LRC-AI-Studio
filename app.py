@@ -125,7 +125,15 @@ def split_lyrics(raw: str) -> tuple[list[str], list[str]]:
     return staff, sung
 
 
-def generate_aligned_lrc(audio_path: str, raw_lyrics: str, title: str = "", artist: str = "", album: str = "") -> dict[str, str]:
+def generate_aligned_lrc(
+        audio_path: str,
+        raw_lyrics: str,
+        title: str = "",
+        artist: str = "",
+        album: str = "",
+        lyricist: str = "",
+        composer: str = "",
+) -> dict[str, str]:
     """Optional Whisper alignment adapted from LRCMaker-AI-Backend.
 
     This function is intentionally imported lazily.  The basic LRC Studio app
@@ -175,17 +183,11 @@ def generate_aligned_lrc(audio_path: str, raw_lyrics: str, title: str = "", arti
             # segment-level fallback so standard LRC can still be generated.
             all_words.append(type("Word", (), {"word": segment.text, "start": segment.start, "end": segment.end})())
 
-    standard: list[str] = []
-    enhanced: list[str] = []
-    if title:
-        standard.append(f"[ti:{title}]")
-        enhanced.append(f"[ti:{title}]")
-    if artist:
-        standard.append(f"[ar:{artist}]")
-        enhanced.append(f"[ar:{artist}]")
-    if album:
-        standard.append(f"[al:{album}]")
-        enhanced.append(f"[al:{album}]")
+    # The project uses a readable custom header instead of [ti:] / [ar:]
+    # metadata tags, as requested by the UI export format.
+    header = [title, artist, album, f"Lyrics: {lyricist}", f"Music: {composer}", ""]
+    standard: list[str] = header.copy()
+    enhanced: list[str] = header.copy()
 
     if staff_lines:
         first_start = float(getattr(all_words[0], "start", 0.0)) if all_words else 0.0
@@ -336,6 +338,8 @@ class LRCHandler(BaseHTTPRequestHandler):
                     fields.get("ti", ""),
                     fields.get("ar", ""),
                     fields.get("al", ""),
+                    fields.get("lyricist", ""),
+                    fields.get("composer", ""),
                 )
             finally:
                 if tmp_path:
