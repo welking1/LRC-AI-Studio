@@ -404,8 +404,9 @@
 [00:07.40]Lyrics: 作词
 [00:09.87]Music: 作曲
 [00:12.34]第一行歌词
+[00:14.56]
 [00:16.78]第二行歌词</pre>
-            <p class="format-note">头部五行会根据第一行歌词前的时间平均分配。导出前可直接编辑每行的时间和文字。</p>
+            <p class="format-note">空行会取前后歌词时间的中间值，导出为只有时间标签的 LRC 行。</p>
           </section>
           <section class="card ai-card">
             <h3><span class="ai-spark">✦</span> 本地 AI 辅助</h3>
@@ -788,7 +789,17 @@
           // Credits before the first lyric are useful context but should not
           // become a sung line; this mirrors the reference project's behavior.
           if (!tags.length && lines.length === 0 && /^(作词|作曲|编曲|演唱|制作|来源|词|曲)\s*[:：]/.test(text)) return;
-          if (!text) return;
+          if (!text) {
+            // Keep timestamp-only lines (created for blank lyric rows), but
+            // continue ignoring annotation-only lines such as [Chorus].
+            if (tags.length) {
+              tags.forEach((tag) => {
+                const fraction = tag[3] ? Number(`0.${tag[3]}`) : 0;
+                lines.push({ time: Number(tag[1]) * 60 + Number(tag[2]) + fraction, text: '' });
+              });
+            }
+            return;
+          }
           if (tags.length) {
             tags.forEach((tag) => {
               const fraction = tag[3] ? Number(`0.${tag[3]}`) : 0;
@@ -838,6 +849,49 @@ els.markButton.textContent = '▶ 开始连续打轴';
         showToast('歌词已清空，可以导入下一首歌词。歌曲信息和音频仍保留。', 'success');
       }
 
+      function timelineWithBlankTimes() {
+        const timeline = [];
+        let index = 0;
+        while (index < state.lines.length) {
+          const line = state.lines[index];
+          if (line.text.trim()) {
+            timeline.push({ index, time: line.time, text: line.text });
+            index += 1;
+            continue;
+          }
+
+          const start = index;
+          while (index < state.lines.length && !state.lines[index].text.trim()) index += 1;
+          const end = index;
+          const count = end - start;
+          let previousTime = 0;
+          for (let before = start - 1; before >= 0; before -= 1) {
+            if (state.lines[before].text.trim() && state.lines[before].time != null) {
+              previousTime = Number(state.lines[before].time) || 0;
+              break;
+            }
+          }
+
+          let nextTime = 0;
+          for (let after = end; after < state.lines.length; after += 1) {
+            if (state.lines[after].text.trim() && state.lines[after].time != null) {
+              nextTime = Number(state.lines[after].time) || 0;
+              break;
+            }
+          }
+          if (nextTime <= previousTime) {
+            nextTime = state.duration > previousTime ? state.duration : previousTime + 1;
+          }
+
+          for (let blankIndex = 0; blankIndex < count; blankIndex += 1) {
+            const ratio = (blankIndex + 1) / (count + 1);
+            const blankTime = previousTime + (nextTime - previousTime) * ratio;
+            timeline.push({ index: start + blankIndex, time: blankTime, text: '' });
+          }
+        }
+        return timeline;
+      }
+
       function buildLrc() {
         const valid = state.lines.filter((line) => line.text.trim() && line.time != null).slice().sort((a, b) => a.time - b.time);
         const missing = state.lines.filter((line) => line.text.trim() && line.time == null).length;
@@ -852,7 +906,18 @@ els.markButton.textContent = '▶ 开始连续打轴';
           const headerInterval = firstLyricTime / headerValues.length;
           output.push(...headerValues.map((value, index) => `${lrcTag(index * headerInterval)}${value}`));
         }
-        output.push(...valid.map((line) => `${lrcTag(line.time)}${line.text.trim()}`));
+        // Blank rows become timestamp-only LRC lines. Their timestamps are
+        // interpolated between the nearest timed lyric before and after them.
+        const timeline = timelineWithBlankTimes();
+        timeline.forEach((entry) => {
+          if (!entry.text.trim()) {
+            state.lines[entry.index].time = entry.time;
+            output.push(lrcTag(entry.time));
+          } else if (entry.time != null) {
+            output.push(`${lrcTag(entry.time)}${entry.text.trim()}`);
+          }
+        });
+        renderEditor();
         return output.join('\n') + '\n';
       }
 
@@ -910,6 +975,21 @@ els.markButton.textContent = '▶ 开始连续打轴';
         }
       }
 
+      function restoreBlankRows(sourceLines, alignedLines) {
+        if (!sourceLines.some((line) => !line.text.trim())) return alignedLines;
+        const merged = [];
+        let alignedIndex = 0;
+        sourceLines.forEach((sourceLine) => {
+          if (!sourceLine.text.trim()) {
+            merged.push({ time: null, text: '' });
+          } else if (alignedIndex < alignedLines.length) {
+            merged.push(alignedLines[alignedIndex++]);
+          }
+        });
+        while (alignedIndex < alignedLines.length) merged.push(alignedLines[alignedIndex++]);
+        return merged;
+      }
+
       async function waitForAiJob(jobId) {
         const deadline = Date.now() + 60 * 60 * 1000;
         while (Date.now() < deadline) {
@@ -962,6 +1042,7 @@ els.markButton.textContent = '▶ 开始连续打轴';
           setAiProgress('AI 组件未就绪', false);
           return;
         }
+        const sourceLines = state.lines.map((line) => ({ time: line.time, text: line.text }));
         const form = new FormData();
         form.append('audio', state.audioFile, state.audioFile.name);
         form.append('lyrics', state.lines.map((line) => line.text).join('\n'));
@@ -986,7 +1067,7 @@ els.markButton.textContent = '▶ 开始连续打轴';
           }
           const next = parseLyrics(result?.standard_lrc || '');
           if (!next.length) throw new Error('AI 没有返回可用的歌词时间轴');
-          state.lines = next; state.selectedIndex = 0; state.activeIndex = -1; renderEditor();
+          state.lines = restoreBlankRows(sourceLines, next); state.selectedIndex = 0; state.activeIndex = -1; renderEditor();
           els.aiModalBackdrop.classList.add('hidden');
           showToast('AI 对齐完成，可以继续人工微调。', 'success');
         } catch (error) {
