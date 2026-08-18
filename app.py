@@ -17,19 +17,26 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 import traceback
+import uuid
 import webbrowser
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
-from urllib.parse import urlparse
+from typing import Any, Callable
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 INDEX_FILE = ROOT / "index.html"
 APP_NAME = "LRC Studio"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.2"
+
+# AI jobs run in background threads so the browser can poll real-time
+# progress while stable-ts is processing the audio.
+AI_JOBS: dict[str, dict[str, Any]] = {}
+AI_JOBS_LOCK = threading.RLock()
 
 
 def find_free_port(start: int = 8765) -> int:
@@ -79,6 +86,41 @@ def decode_audio_for_alignment(audio_path: str):
 
 def json_bytes(data: Any) -> bytes:
     return json.dumps(data, ensure_ascii=False).encode("utf-8")
+
+
+def create_ai_job() -> str:
+    job_id = uuid.uuid4().hex
+    now = time.time()
+    with AI_JOBS_LOCK:
+        # Keep the in-memory registry bounded during a long-running session.
+        for old_id, old_job in list(AI_JOBS.items()):
+            if now - old_job.get("updated", now) > 3600:
+                AI_JOBS.pop(old_id, None)
+        AI_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "progress": 0.0,
+            "message": "任务已创建，等待本地 AI 开始处理…",
+            "result": None,
+            "error": None,
+            "updated": now,
+        }
+    return job_id
+
+
+def update_ai_job(job_id: str, **changes: Any) -> None:
+    with AI_JOBS_LOCK:
+        job = AI_JOBS.get(job_id)
+        if job is None:
+            return
+        job.update(changes)
+        job["updated"] = time.time()
+
+
+def get_ai_job(job_id: str) -> dict[str, Any] | None:
+    with AI_JOBS_LOCK:
+        job = AI_JOBS.get(job_id)
+        return dict(job) if job is not None else None
 
 
 def format_time(seconds: float) -> str:
@@ -133,6 +175,8 @@ def generate_aligned_lrc(
         album: str = "",
         lyricist: str = "",
         composer: str = "",
+        include_info: bool = True,
+        progress_hook: Callable[[float, str], None] | None = None,
 ) -> dict[str, str]:
     """Optional Whisper alignment adapted from LRCMaker-AI-Backend.
 
@@ -150,6 +194,8 @@ def generate_aligned_lrc(
     cache_dir.mkdir(parents=True, exist_ok=True)
     target: str = str(model_dir) if model_dir.exists() and any(model_dir.iterdir()) else os.environ.get("LRC_AI_MODEL", "small")
 
+    if progress_hook:
+        progress_hook(0.04, "正在加载本地 Whisper 模型…")
     print("🧠 正在进行本地 Whisper 强制对齐…", flush=True)
     device = os.environ.get("LRC_AI_DEVICE", "cpu")
     # CPU does not have efficient float16 kernels. int8 avoids the
@@ -164,6 +210,8 @@ def generate_aligned_lrc(
         compute_type=compute_type,
         download_root=str(cache_dir),
     )
+    if progress_hook:
+        progress_hook(0.16, "Whisper 模型已就绪，正在准备歌词…")
     staff_lines, sung_lines = split_lyrics(raw_lyrics)
     if not sung_lines:
         raise ValueError("没有找到有效歌词。请至少输入一行歌词。")
@@ -171,8 +219,34 @@ def generate_aligned_lrc(
     # Do not pass the file path to stable-ts: its path loader invokes an
     # external ffmpeg.exe on Windows.  PyAV is bundled with faster-whisper and
     # works without adding anything to the system PATH.
+    if progress_hook:
+        progress_hook(0.18, "正在读取音频…")
     audio_waveform = decode_audio_for_alignment(audio_path)
-    result = model.align(audio_waveform, "\n".join(sung_lines), language=os.environ.get("LRC_LANGUAGE", "zh"))
+    if progress_hook:
+        progress_hook(0.25, "音频读取完成，开始逐句对齐…")
+
+    def alignment_progress(current: float, total: float) -> None:
+        ratio = (float(current) / float(total)) if total else 0.0
+        ratio = max(0.0, min(1.0, ratio))
+        if progress_hook:
+            progress_hook(0.25 + ratio * 0.70, f"正在对齐歌词 {current:.1f} / {total:.1f} 秒…")
+
+    align_kwargs = {"progress_callback": alignment_progress}
+    try:
+        result = model.align(
+            audio_waveform,
+            "\n".join(sung_lines),
+            language=os.environ.get("LRC_LANGUAGE", "zh"),
+            **align_kwargs,
+        )
+    except TypeError as exc:
+        # Older stable-ts releases may not expose progress_callback. Keep the
+        # alignment compatible while still reporting the surrounding phases.
+        if "progress_callback" not in str(exc):
+            raise
+        result = model.align(audio_waveform, "\n".join(sung_lines), language=os.environ.get("LRC_LANGUAGE", "zh"))
+    if progress_hook:
+        progress_hook(0.97, "对齐完成，正在整理 LRC…")
     all_words: list[Any] = []
     for segment in result.segments:
         words = getattr(segment, "words", None) or []
@@ -183,14 +257,26 @@ def generate_aligned_lrc(
             # segment-level fallback so standard LRC can still be generated.
             all_words.append(type("Word", (), {"word": segment.text, "start": segment.start, "end": segment.end})())
 
-    # The project uses a readable custom header instead of [ti:] / [ar:]
-    # metadata tags, as requested by the UI export format.
-    header = [title, artist, album, f"Lyrics: {lyricist}", f"Music: {composer}", ""]
-    standard: list[str] = header.copy()
-    enhanced: list[str] = header.copy()
+    standard: list[str] = []
+    enhanced: list[str] = []
+    if include_info:
+        # Put the five project metadata entries before the first lyric and
+        # spread them evenly across the available intro interval. The first
+        # entry is always [00:00.00].
+        first_start = max(0.0, float(getattr(all_words[0], "start", 0.0))) if all_words else 0.0
+        header_values = [
+            title,
+            f"ARTISTS: {artist}",
+            f"Albums: {album}",
+            f"Lyrics: {lyricist}",
+            f"Music: {composer}",
+        ]
+        header_interval = first_start / len(header_values)
+        header = [f"{format_time(index * header_interval)}{value}" for index, value in enumerate(header_values)]
+        standard.extend(header)
+        enhanced.extend(header)
 
-    if staff_lines:
-        first_start = float(getattr(all_words[0], "start", 0.0)) if all_words else 0.0
+    if include_info and staff_lines:
         intro = max(0.0, first_start - 0.5)
         interval = intro / max(1, len(staff_lines))
         for index, staff in enumerate(staff_lines):
@@ -238,6 +324,48 @@ def generate_aligned_lrc(
     return {"standard_lrc": "\n".join(standard), "enhanced_lrc": "\n".join(enhanced)}
 
 
+def run_ai_job(job_id: str, tmp_path: str, fields: dict[str, str]) -> None:
+    """Run alignment in the background and mirror console progress to polling clients."""
+    last_console_progress = -1.0
+
+    def report(progress: float, message: str) -> None:
+        nonlocal last_console_progress
+        percent = max(0.0, min(100.0, float(progress) * 100.0))
+        update_ai_job(job_id, status="running", progress=percent, message=message)
+        # The same phase/progress is printed to the terminal, but throttled so
+        # a long song does not flood the console.
+        if percent - last_console_progress >= 1.0 or percent >= 99.0:
+            print(f"📊 AI 对齐进度 {percent:5.1f}% · {message}", flush=True)
+            last_console_progress = percent
+
+    update_ai_job(job_id, status="running", progress=1.0, message="后台任务已启动…")
+    try:
+        include_info = fields.get("include_info", "1").strip().lower() not in {"0", "false", "no", "off"}
+        result = generate_aligned_lrc(
+            tmp_path,
+            fields.get("lyrics", ""),
+            fields.get("ti", ""),
+            fields.get("ar", ""),
+            fields.get("al", ""),
+            fields.get("lyricist", ""),
+            fields.get("composer", ""),
+            include_info,
+            report,
+        )
+        update_ai_job(job_id, status="done", progress=100.0, message="AI 对齐完成", result=result, error=None)
+        print("✅ AI 对齐完成。", flush=True)
+    except Exception as exc:
+        print(f"❌ AI 对齐失败: {exc}", file=sys.stderr, flush=True)
+        if os.environ.get("LRC_DEBUG"):
+            traceback.print_exc()
+        update_ai_job(job_id, status="error", progress=100.0, message="AI 对齐失败", error=str(exc), result=None)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
 def parse_multipart(content_type: str, body: bytes) -> tuple[dict[str, str], dict[str, tuple[str, bytes]]]:
     """Parse FormData without adding python-multipart as a dependency."""
     header = (
@@ -263,7 +391,7 @@ def parse_multipart(content_type: str, body: bytes) -> tuple[dict[str, str], dic
 
 
 class LRCHandler(BaseHTTPRequestHandler):
-    server_version = "LRCStudio/1.0"
+    server_version = "LRCStudio/1.0.2"
 
     def log_message(self, format: str, *args: Any) -> None:
         # Keep the terminal useful without dumping every static asset request.
@@ -282,8 +410,18 @@ class LRCHandler(BaseHTTPRequestHandler):
         self.send_bytes(json_bytes(data), "application/json; charset=utf-8", status)
 
     def do_GET(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path
-        if path == "/api/ping":
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/api/align/status":
+            job_id = parse_qs(parsed.query).get("job", [""])[0]
+            job = get_ai_job(job_id)
+            if not job:
+                self.send_json({"code": 404, "message": "找不到该 AI 任务", "data": None}, 404)
+                return
+            job.pop("updated", None)
+            self.send_json({"code": 200, "message": "success", "data": job})
+            return
+        if path == "/api/ping": 
             self.send_json({
                 "status": "ok",
                 "app": APP_NAME,
@@ -327,29 +465,26 @@ class LRCHandler(BaseHTTPRequestHandler):
                 raise ValueError("未收到音频文件")
             filename, content = files["audio"]
             suffix = Path(filename).suffix or ".audio"
-            tmp_path: str | None = None
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                    tmp.write(content)
-                    tmp_path = tmp.name
-                result = generate_aligned_lrc(
-                    tmp_path,
-                    fields.get("lyrics", ""),
-                    fields.get("ti", ""),
-                    fields.get("ar", ""),
-                    fields.get("al", ""),
-                    fields.get("lyricist", ""),
-                    fields.get("composer", ""),
-                )
-            finally:
-                if tmp_path:
-                    try:
-                        os.unlink(tmp_path)
-                    except OSError:
-                        pass
-            self.send_json({"code": 200, "message": "success", "data": result})
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+
+            job_id = create_ai_job()
+            worker = threading.Thread(
+                target=run_ai_job,
+                args=(job_id, tmp_path, fields),
+                name=f"lrc-ai-{job_id[:8]}",
+                daemon=True,
+            )
+            worker.start()
+            print(f"🚀 AI 任务已创建: {job_id}", flush=True)
+            self.send_json({
+                "code": 202,
+                "message": "AI 任务已开始",
+                "data": {"job_id": job_id},
+            }, 202)
         except Exception as exc:  # AI is optional; return a friendly message.
-            print(f"❌ AI 对齐失败: {exc}", file=sys.stderr, flush=True)
+            print(f"❌ AI 任务创建失败: {exc}", file=sys.stderr, flush=True)
             if os.environ.get("LRC_DEBUG"):
                 traceback.print_exc()
             self.send_json({"code": 500, "message": str(exc), "data": None}, 500)

@@ -73,6 +73,9 @@
     }
     .field input::placeholder { color: #4f5f7c; }
     .field input:hover, .field input:focus { border-color: var(--line-strong); background: #101a2e; }
+    .info-toggle { display: flex; align-items: center; gap: 8px; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; cursor: pointer; }
+    .info-toggle input { width: 15px; height: 15px; margin: 0; accent-color: var(--blue); cursor: pointer; }
+    .info-toggle b { color: var(--text); font-weight: 600; }
     .drop-zone {
       display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 142px;
       padding: 17px 13px; text-align: center; border: 1px dashed #3e527c; border-radius: 14px;
@@ -154,6 +157,8 @@
     .line-count { color: var(--muted-2); font-size: 11px; margin-right: 5px; }
     .mini-button { border: 1px solid transparent; border-radius: 7px; padding: 7px 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
     .mini-button:hover:not(:disabled) { color: var(--text); border-color: var(--line); background: rgba(255,255,255,.04); }
+    .mini-button.danger { color: #d9919c; }
+    .mini-button.danger:hover:not(:disabled) { color: var(--red); border-color: rgba(255, 119, 134, .35); background: rgba(255, 119, 134, .08); }
     .mini-button:disabled { opacity: .4; cursor: not-allowed; }
     .empty-editor { padding: 30px 33px 34px; }
     .empty-editor-top { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 15px; }
@@ -216,7 +221,7 @@
     .toast.warn { border-color: rgba(244, 200, 106, .5); }
     .toast.error { border-color: rgba(255, 119, 134, .55); }
 
-    .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(3, 6, 13, .76); backdrop-filter: blur(8px); }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(3, 6, 13, .76); }
     .modal-backdrop.hidden { display: none; }
     .modal { width: min(480px, 100%); border: 1px solid var(--line-strong); border-radius: 17px; background: #121b2e; box-shadow: 0 28px 80px rgba(0,0,0,.52); overflow: hidden; }
     .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 19px 20px 14px; border-bottom: 1px solid var(--line); }
@@ -231,10 +236,15 @@
     .ai-box.warn { border-color: rgba(244, 200, 106, .48); background: rgba(137, 101, 35, .12); }
     .ai-box.error { border-color: rgba(255, 119, 134, .52); background: rgba(137, 42, 65, .12); }
     .ai-box.success { border-color: rgba(84, 213, 161, .45); background: rgba(38, 120, 91, .12); }
-    .install-code { display: block; margin: 10px 0 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; color: #b6c8ff; background: #0a1222; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .modal-progress { display: none; align-items: center; gap: 9px; margin-top: 14px; color: var(--cyan); font-size: 11px; }
+    .modal-progress { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 11px 12px; border: 1px solid rgba(86, 215, 233, .2); border-radius: 10px; color: var(--cyan); background: rgba(29, 57, 79, .2); font-size: 11px; }
     .modal-progress.show { display: flex; }
-    .spinner { width: 14px; height: 14px; border: 2px solid rgba(86, 215, 233, .25); border-top-color: var(--cyan); border-radius: 50%; animation: spin .8s linear infinite; }
+    .progress-copy { flex: 1; min-width: 0; }
+    .progress-label { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .progress-bar-track { position: relative; height: 9px; margin-top: 8px; overflow: hidden; border-radius: 9px; background: linear-gradient(90deg, #263b5b, #1b2c47); box-shadow: inset 0 0 0 1px rgba(145, 174, 225, .12); }
+    .progress-bar-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--cyan)); opacity: .72; transition: width .35s ease; }
+    .modal-progress.running .progress-bar-fill { opacity: 1; transition: width .35s ease; }
+    .spinner { flex: 0 0 auto; width: 14px; height: 14px; border: 2px solid rgba(86, 215, 233, .25); border-top-color: var(--cyan); border-radius: 50%; opacity: .35; }
+    .modal-progress.running .spinner { opacity: 1; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; }
 
@@ -288,13 +298,14 @@
         <div><strong>LRC Studio</strong><span>Local lyric alignment</span></div>
       </div>
 
-      <div class="side-label">项目资料</div>
+      <div class="side-label">歌曲信息</div>
       <div class="project-fields">
         <div class="field"><label for="titleField">歌曲标题</label><input id="titleField" type="text" placeholder="例如：夜空中最亮的星"></div>
         <div class="field"><label for="artistField">歌手</label><input id="artistField" type="text" placeholder="可选"></div>
         <div class="field"><label for="albumField">专辑（Albums）</label><input id="albumField" type="text" placeholder="可选"></div>
         <div class="field"><label for="lyricistField">作词</label><input id="lyricistField" type="text" placeholder="可选"></div>
         <div class="field"><label for="composerField">作曲</label><input id="composerField" type="text" placeholder="可选"></div>
+        <label class="info-toggle" for="includeInfoField"><input id="includeInfoField" type="checkbox" checked><span><b>写入歌曲信息</b>（导出时包含头部五行）</span></label>
       </div>
 
       <div class="side-label">音频文件</div>
@@ -306,7 +317,7 @@
         <span class="audio-file-name" id="audioFileName"></span>
       </label>
       <div class="side-hint"><b>⌁</b><span>不需要油猴、浏览器扩展或账号。打开这个页面就能开始。</span></div>
-      <div class="sidebar-footer">LRC Studio v1.0<br>本地优先 · 无上传 · 无追踪</div>
+      <div class="sidebar-footer">LRC Studio v1.0.2<br>本地优先 · 无上传 · 无追踪</div>
     </aside>
 
     <main class="main">
@@ -336,7 +347,7 @@
       <section class="card audio-card">
         <div class="card-head">
           <div class="card-title"><div class="card-title-icon">◒</div><div><strong>音频预览</strong><span>点击波形任意位置可跳转</span></div></div>
-          <div class="audio-meta" id="audioMeta"><span class="status-dot"></span><span id="audioStatus">还没有音频</span></div>
+          <div class="audio-meta" id="audioMeta"><span class="status-dot"></span><strong id="audioPreviewFileName">未导入音频</strong><span id="audioStatus">等待导入</span></div>
         </div>
         <div class="wave-wrap" id="waveWrap">
           <canvas id="waveform"></canvas>
@@ -357,7 +368,7 @@
         <section class="card editor-card">
           <div class="card-head">
             <div class="card-title"><div class="card-title-icon">≡</div><div><strong>歌词时间轴</strong><span>每一行一个时间点，越准越好听</span></div></div>
-            <div class="editor-head-actions"><span class="line-count" id="lineCount">0 行</span><button class="mini-button" id="sampleButton">填充示例</button></div>
+            <div class="editor-head-actions"><span class="line-count" id="lineCount">0 行</span><button class="mini-button" id="sampleButton">填充示例</button><button class="mini-button danger" id="clearLyricsButton" disabled>清空歌词</button></div>
           </div>
 
           <div class="empty-editor" id="emptyEditor">
@@ -387,15 +398,14 @@
           </section>
           <section class="card format-card">
             <h3>导出格式</h3>
-            <pre class="format-preview">歌曲标题
-歌手
-Albums
-Lyrics: 作词
-Music: 作曲
-
+            <pre class="format-preview">[00:00.00]歌曲标题
+[00:02.47]ARTISTS: 歌手
+[00:04.94]Albums: 专辑
+[00:07.40]Lyrics: 作词
+[00:09.87]Music: 作曲
 [00:12.34]第一行歌词
 [00:16.78]第二行歌词</pre>
-            <p class="format-note">按项目资料生成自定义头部，下面接逐行时间标签。导出前可直接编辑每行的时间和文字。</p>
+            <p class="format-note">头部五行会根据第一行歌词前的时间平均分配。导出前可直接编辑每行的时间和文字。</p>
           </section>
           <section class="card ai-card">
             <h3><span class="ai-spark">✦</span> 本地 AI 辅助</h3>
@@ -413,8 +423,8 @@ Music: 作曲
     <section class="modal">
       <div class="modal-head"><div><h2 id="aiModalTitle">本地 AI 对齐</h2><p>参考 Whisper 本地强制对齐流程，把逐行歌词对到歌曲里。</p></div><button class="modal-close" id="closeAiModal" aria-label="关闭">×</button></div>
       <div class="modal-body">
-        <div class="ai-box" id="aiAvailableBox"><strong>可选功能，不影响基础使用</strong><p id="aiModalMessage">正在检测本机 AI 组件…</p><code class="install-code" id="installCode">python -m pip install -r requirements-ai.txt</code></div>
-        <div class="modal-progress" id="modalProgress"><span class="spinner"></span><span>正在本地分析音频，歌曲越长需要的时间越久…</span></div>
+        <div class="ai-box" id="aiAvailableBox"><strong>可选功能，不影响基础使用</strong><p id="aiModalMessage">正在检测本机 AI 组件…</p></div>
+        <div class="modal-progress show" id="modalProgress"><span class="spinner"></span><div class="progress-copy"><div class="progress-label" id="progressLabel">等待开始 AI 对齐</div><div class="progress-bar-track"><div class="progress-bar-fill" id="progressBarFill"></div></div></div></div>
         <div class="modal-actions"><button class="button" id="cancelAiButton">取消</button><button class="button primary" id="runAiButton">开始 AI 对齐</button></div>
       </div>
     </section>
@@ -426,15 +436,15 @@ Music: 作曲
 
       const $ = (selector) => document.querySelector(selector);
       const els = {
-        audioInput: $('#audioInput'), dropZone: $('#dropZone'), audioFileName: $('#audioFileName'), audioMeta: $('#audioMeta'), audioStatus: $('#audioStatus'),
+        audioInput: $('#audioInput'), dropZone: $('#dropZone'), audioFileName: $('#audioFileName'), audioMeta: $('#audioMeta'), audioPreviewFileName: $('#audioPreviewFileName'), audioStatus: $('#audioStatus'),
         audioElement: $('#audioElement'), waveform: $('#waveform'), waveWrap: $('#waveWrap'), waveEmpty: $('#waveEmpty'),
         playButton: $('#playButton'), backButton: $('#backButton'), forwardButton: $('#forwardButton'), speedSelect: $('#speedSelect'),
         currentTime: $('#currentTime'), totalTime: $('#totalTime'), progressTrack: $('#progressTrack'), progressFill: $('#progressFill'), progressThumb: $('#progressThumb'),
-        titleField: $('#titleField'), artistField: $('#artistField'), albumField: $('#albumField'), lyricistField: $('#lyricistField'), composerField: $('#composerField'), importLyricsButton: $('#importLyricsButton'), lyricsFileInput: $('#lyricsFileInput'),
-        lyricsSource: $('#lyricsSource'), parseButton: $('#parseButton'), sourceSampleButton: $('#sourceSampleButton'), sampleButton: $('#sampleButton'),
+        titleField: $('#titleField'), artistField: $('#artistField'), albumField: $('#albumField'), lyricistField: $('#lyricistField'), composerField: $('#composerField'), includeInfoField: $('#includeInfoField'), importLyricsButton: $('#importLyricsButton'), lyricsFileInput: $('#lyricsFileInput'),
+        lyricsSource: $('#lyricsSource'), parseButton: $('#parseButton'), sourceSampleButton: $('#sourceSampleButton'), sampleButton: $('#sampleButton'), clearLyricsButton: $('#clearLyricsButton'),
         emptyEditor: $('#emptyEditor'), editorBody: $('#editorBody'), linesList: $('#linesList'), lineCount: $('#lineCount'), exportButton: $('#exportButton'),
         markButton: $('#markButton'), autoDistributeButton: $('#autoDistributeButton'), sortButton: $('#sortButton'), addLineButton: $('#addLineButton'), selectionHint: $('#selectionHint'),
-        toast: $('#toast'), aiButton: $('#aiButton'), aiStatus: $('#aiStatus'), aiModalBackdrop: $('#aiModalBackdrop'), aiAvailableBox: $('#aiAvailableBox'), closeAiModal: $('#closeAiModal'), cancelAiButton: $('#cancelAiButton'), runAiButton: $('#runAiButton'), aiModalMessage: $('#aiModalMessage'), modalProgress: $('#modalProgress')
+        toast: $('#toast'), aiButton: $('#aiButton'), aiStatus: $('#aiStatus'), aiModalBackdrop: $('#aiModalBackdrop'), aiAvailableBox: $('#aiAvailableBox'), closeAiModal: $('#closeAiModal'), cancelAiButton: $('#cancelAiButton'), runAiButton: $('#runAiButton'), aiModalMessage: $('#aiModalMessage'), modalProgress: $('#modalProgress'), progressLabel: $('#progressLabel'), progressBarFill: $('#progressBarFill')
       };
 
       const SAMPLE = `夜空中最亮的星
@@ -509,6 +519,9 @@ Music: 作曲
         field.value = getProjectField(key);
         field.addEventListener('input', () => setProjectField(key, field.value));
       });
+      const savedIncludeInfo = getProjectField('includeInfo');
+      els.includeInfoField.checked = savedIncludeInfo === '' ? true : savedIncludeInfo !== '0';
+      els.includeInfoField.addEventListener('change', () => setProjectField('includeInfo', els.includeInfoField.checked ? '1' : '0'));
 
       function renderEditor() {
         const hasLines = state.lines.length > 0;
@@ -518,6 +531,7 @@ Music: 作曲
         els.autoDistributeButton.disabled = !hasLines;
         els.sortButton.disabled = !hasLines;
         els.addLineButton.disabled = !hasLines;
+        els.clearLyricsButton.disabled = !hasLines;
         els.markButton.disabled = !hasLines || !state.audioFile;
         els.lineCount.textContent = `${state.lines.length} 行`;
         if (!hasLines) return;
@@ -678,11 +692,15 @@ Music: 作曲
         if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
         state.audioFile = file;
         state.audioUrl = URL.createObjectURL(file);
+        const inferredTitle = file.name.replace(/\.[^.]+$/, '');
+        els.titleField.value = inferredTitle;
+        setProjectField('title', inferredTitle);
         state.duration = 0;
         state.waveform = [];
         els.audioElement.src = state.audioUrl;
         els.audioElement.load();
         els.audioFileName.textContent = file.name;
+        els.audioPreviewFileName.textContent = file.name;
         els.audioStatus.textContent = '正在读取音频…';
         els.audioMeta.classList.remove('ready');
         els.waveEmpty.hidden = true;
@@ -690,34 +708,68 @@ Music: 作曲
         decodeWaveform(file);
       }
 
+      function stripLyricAnnotations(text) {
+        // Remove performance notes such as [Chorus] or (Vocals getting
+        // passionate), but call this only after LRC time tags have been
+        // removed so [00:12.34] remains a valid timestamp.
+        return String(text || '')
+          .replace(/\[[^\]\r\n]*\]/g, '')
+          .replace(/\([^()\r\n]*\)/g, '')
+          .replace(/（[^（）\r\n]*）/g, '')
+          .replace(/【[^【】\r\n]*】/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+
       function parseLyrics(rawText) {
         const lines = [];
         const metadata = { title: '', artist: '', album: '', lyricist: '', composer: '' };
         let rawLines = String(rawText || '').replace(/^\uFEFF/, '').split(/\r?\n/);
 
-        // Also understand the custom exported header:
-        // title / artist / album / Lyrics: lyricist / Music: composer.
-        // Keep the first three positions even when a project field is empty.
-        let header = rawLines.slice(0, 5).map((line) => line.trim());
+        // Also understand the custom exported header. New exports timestamp
+        // each header line, while older projects may have had untagged lines.
+        const stripHeaderTag = (line) => line.replace(/^\[\d+:\d{1,2}(?:[.:]\d{1,3})?\]/, '').trim();
+        let header = rawLines.slice(0, 5).map(stripHeaderTag);
         let headerStart = 0;
-        if (!(header.length === 5 && header[3].match(/^Lyrics\s*:/i) && header[4].match(/^Music\s*:/i))) {
-          const firstContent = rawLines.findIndex((line) => line.trim());
-          if (firstContent >= 0) {
-            headerStart = firstContent;
-            header = rawLines.slice(firstContent, firstContent + 5).map((line) => line.trim());
-          }
-        }
-        if (header.length === 5 && header[3].match(/^Lyrics\s*:/i) && header[4].match(/^Music\s*:/i)
-            && !header[0].match(/^\[/) && !header[1].match(/^\[/) && !header[2].match(/^\[/)) {
-          [metadata.title, metadata.artist, metadata.album] = header.slice(0, 3);
+        const isCustomHeader = (items) => items.length === 5
+          && items[1].match(/^ARTISTS\s*:/i)
+          && items[2].match(/^Albums\s*:/i)
+          && items[3].match(/^Lyrics\s*:/i)
+          && items[4].match(/^Music\s*:/i);
+        if (isCustomHeader(header)) {
+          metadata.title = header[0];
+          metadata.artist = header[1].replace(/^ARTISTS\s*:/i, '').trim();
+          metadata.album = header[2].replace(/^Albums\s*:/i, '').trim();
           metadata.lyricist = header[3].replace(/^Lyrics\s*:/i, '').trim();
           metadata.composer = header[4].replace(/^Music\s*:/i, '').trim();
-          rawLines.splice(headerStart, 5);
+          rawLines.splice(0, 5);
+        } else {
+          if (!(header.length === 5 && header[3].match(/^Lyrics\s*:/i) && header[4].match(/^Music\s*:/i))) {
+            const firstContent = rawLines.findIndex((line) => line.trim());
+            if (firstContent >= 0) {
+              headerStart = firstContent;
+              header = rawLines.slice(firstContent, firstContent + 5).map((line) => line.trim());
+            }
+          }
+          if (header.length === 5 && header[3].match(/^Lyrics\s*:/i) && header[4].match(/^Music\s*:/i)
+              && !header[0].match(/^\[/) && !header[1].match(/^\[/) && !header[2].match(/^\[/)) {
+            [metadata.title, metadata.artist, metadata.album] = header.slice(0, 3);
+            metadata.lyricist = header[3].replace(/^Lyrics\s*:/i, '').trim();
+            metadata.composer = header[4].replace(/^Music\s*:/i, '').trim();
+            rawLines.splice(headerStart, 5);
+          }
         }
 
         rawLines.forEach((rawLine) => {
           const source = rawLine.trim();
-          if (!source) return;
+          if (!source) {
+            // Keep spacing, but collapse a run of empty source lines into a
+            // single editable blank row.
+            if (!lines.length || lines[lines.length - 1].text !== '') {
+              lines.push({ time: null, text: '' });
+            }
+            return;
+          }
           const meta = source.match(/^\[(ti|ar|al|by|ly|mu):([^\]]*)\]\s*$/i);
           if (meta) {
             const key = { ti: 'title', ar: 'artist', al: 'album', by: 'lyricist', ly: 'lyricist', mu: 'composer' }[meta[1].toLowerCase()];
@@ -732,7 +784,7 @@ Music: 作曲
           if (/^\[(offset|re|ve):/i.test(source)) return;
           if (source === '---') return;
           const tags = [...source.matchAll(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g)];
-          const text = source.replace(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g, '').trim();
+          const text = stripLyricAnnotations(source.replace(/\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]/g, ''));
           // Credits before the first lyric are useful context but should not
           // become a sung line; this mirrors the reference project's behavior.
           if (!tags.length && lines.length === 0 && /^(作词|作曲|编曲|演唱|制作|来源|词|曲)\s*[:：]/.test(text)) return;
@@ -756,7 +808,7 @@ Music: 作曲
 
       function loadLyricsText(text, message = '歌词已载入') {
         const parsed = parseLyrics(text);
-        if (!parsed.length) { showToast('没有找到有效歌词，请至少输入一行文字。', 'error'); return false; }
+        if (!parsed.length || !parsed.some((line) => line.text.trim())) { showToast('没有找到有效歌词，请至少输入一行文字。', 'error'); return false; }
         state.lines = parsed;
         state.selectedIndex = 0;
         state.activeIndex = -1;
@@ -768,6 +820,24 @@ els.markButton.textContent = '▶ 开始连续打轴';
         return true;
       }
 
+      function clearLyrics() {
+        if (!state.lines.length) return;
+        if (!window.confirm('确定清空当前歌词时间轴吗？\n歌曲信息和音频文件会保留。')) return;
+        state.lines = [];
+        state.selectedIndex = -1;
+        state.activeIndex = -1;
+        state.marking = false;
+        els.audioElement.pause();
+        els.audioElement.currentTime = 0;
+        els.lyricsSource.value = '';
+        els.markButton.classList.remove('marking');
+        els.markButton.textContent = '▶ 开始连续打轴';
+        renderEditor();
+        renderTransport();
+        drawWaveform();
+        showToast('歌词已清空，可以导入下一首歌词。歌曲信息和音频仍保留。', 'success');
+      }
+
       function buildLrc() {
         const valid = state.lines.filter((line) => line.text.trim() && line.time != null).slice().sort((a, b) => a.time - b.time);
         const missing = state.lines.filter((line) => line.text.trim() && line.time == null).length;
@@ -775,7 +845,13 @@ els.markButton.textContent = '▶ 开始连续打轴';
         if (missing) showToast(`还有 ${missing} 行没有时间点，本次将跳过它们。`, 'warn');
         const title = els.titleField.value.trim(), artist = els.artistField.value.trim(), album = els.albumField.value.trim();
         const lyricist = els.lyricistField.value.trim(), composer = els.composerField.value.trim();
-        const output = [title, artist, album, `Lyrics: ${lyricist}`, `Music: ${composer}`, ''];
+        const output = [];
+        if (els.includeInfoField.checked) {
+          const firstLyricTime = Math.max(0, Number(valid[0].time) || 0);
+          const headerValues = [title, `ARTISTS: ${artist}`, `Albums: ${album}`, `Lyrics: ${lyricist}`, `Music: ${composer}`];
+          const headerInterval = firstLyricTime / headerValues.length;
+          output.push(...headerValues.map((value, index) => `${lrcTag(index * headerInterval)}${value}`));
+        }
         output.push(...valid.map((line) => `${lrcTag(line.time)}${line.text.trim()}`));
         return output.join('\n') + '\n';
       }
@@ -822,34 +898,68 @@ els.markButton.textContent = '▶ 开始连续打轴';
         if (kind) els.aiAvailableBox.classList.add(kind);
       }
 
+      function setAiProgress(label, running = false, percent = null) {
+        els.modalProgress.classList.add('show');
+        els.modalProgress.classList.toggle('running', running);
+        els.progressLabel.textContent = label;
+        if (percent != null) {
+          const value = Math.max(0, Math.min(100, Number(percent) || 0));
+          els.progressBarFill.style.width = `${value}%`;
+        } else if (!running) {
+          els.progressBarFill.style.width = '0%';
+        }
+      }
+
+      async function waitForAiJob(jobId) {
+        const deadline = Date.now() + 60 * 60 * 1000;
+        while (Date.now() < deadline) {
+          const response = await fetch(`/api/align/status?job=${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+          const raw = await response.text();
+          let payload;
+          try { payload = JSON.parse(raw); } catch (_) { throw new Error(`进度服务返回了无效响应（HTTP ${response.status}）`); }
+          if (!response.ok || payload.code !== 200) throw new Error(payload.message || `无法读取 AI 进度（HTTP ${response.status}）`);
+          const job = payload.data || {};
+          const percent = Math.max(0, Math.min(100, Number(job.progress) || 0));
+          const message = job.message || '正在本地处理…';
+          setAiProgress(`${message} ${percent.toFixed(1)}%`, true, percent);
+          if (job.status === 'done') return job.result;
+          if (job.status === 'error') throw new Error(job.error || message || 'AI 对齐失败');
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+        throw new Error('AI 对齐等待超时，请查看终端日志。');
+      }
+
       function openAiModal() {
         els.aiModalBackdrop.classList.remove('hidden');
-        els.modalProgress.classList.remove('show');
+        setAiProgress(state.aiAvailable ? '准备就绪，点击开始 AI 对齐 · 0.0%' : 'AI 组件未就绪 · 0.0%', false, 0);
         if (!state.aiAvailable) {
-          setAiModalMessage('当前使用的是零依赖基础模式。若要启用自动对齐，请在项目目录执行下面的命令，安装后重新启动。', 'warn');
+          setAiModalMessage('当前没有检测到可用的本地 Whisper 组件。基础手动打轴仍然可以正常使用。', 'warn');
           els.runAiButton.disabled = true;
         } else {
           setAiModalMessage('检测到 Whisper，可以把当前音频和歌词在本机进行自动对齐。');
           els.runAiButton.disabled = false;
         }
       }
-      function closeAiModal() { if (!els.modalProgress.classList.contains('show')) els.aiModalBackdrop.classList.add('hidden'); }
+      function closeAiModal() { if (!els.modalProgress.classList.contains('running')) els.aiModalBackdrop.classList.add('hidden'); }
 
       async function runAiAlignment() {
         // Keep validation inside the modal. A toast behind the modal looks like
         // a dead button, especially on a short or narrow screen.
         if (!state.audioFile) {
           setAiModalMessage('请先关闭此窗口并导入音频文件，然后再开始 AI 对齐。', 'warn');
+          setAiProgress('等待导入音频文件', false);
           showToast('请先导入音频。', 'warn');
           return;
         }
         if (!state.lines.length) {
           setAiModalMessage('请先关闭此窗口并导入或粘贴歌词，然后再开始 AI 对齐。', 'warn');
+          setAiProgress('等待导入或解析歌词', false);
           showToast('请先导入歌词。', 'warn');
           return;
         }
         if (!state.aiAvailable) {
-          setAiModalMessage('本机没有检测到 Whisper 组件，请先执行上方命令并重新启动 LRC Studio。', 'warn');
+          setAiModalMessage('本机没有检测到可用的 Whisper 组件。', 'warn');
+          setAiProgress('AI 组件未就绪', false);
           return;
         }
         const form = new FormData();
@@ -857,24 +967,37 @@ els.markButton.textContent = '▶ 开始连续打轴';
         form.append('lyrics', state.lines.map((line) => line.text).join('\n'));
         form.append('ti', els.titleField.value.trim()); form.append('ar', els.artistField.value.trim()); form.append('al', els.albumField.value.trim());
         form.append('lyricist', els.lyricistField.value.trim()); form.append('composer', els.composerField.value.trim());
-        els.runAiButton.disabled = true; els.cancelAiButton.disabled = true; els.modalProgress.classList.add('show');
-        setAiModalMessage('请求已发出，正在本地分析音频；长歌曲可能需要几分钟。');
+        form.append('include_info', els.includeInfoField.checked ? '1' : '0');
+        els.runAiButton.disabled = true; els.cancelAiButton.disabled = true;
+        setAiProgress('任务已提交，正在等待本地 AI… 0.0%', true, 0);
+        setAiModalMessage('请求已发出，Whisper 正在本机进行强制对齐。');
+        let failed = false;
         try {
           const response = await fetch('/api/align', { method: 'POST', body: form });
           const raw = await response.text();
           let payload;
           try { payload = JSON.parse(raw); } catch (_) { throw new Error(`本地服务返回了无效响应（HTTP ${response.status}）`); }
-          if (!response.ok || payload.code !== 200) throw new Error(payload.message || `AI 对齐失败（HTTP ${response.status}）`);
-          const next = parseLyrics(payload.data?.standard_lrc || '');
+          if (!response.ok) throw new Error(payload.message || `AI 对齐失败（HTTP ${response.status}）`);
+          let result = payload.data;
+          if (payload.code === 202 && payload.data?.job_id) {
+            result = await waitForAiJob(payload.data.job_id);
+          } else if (payload.code !== 200) {
+            throw new Error(payload.message || 'AI 任务创建失败');
+          }
+          const next = parseLyrics(result?.standard_lrc || '');
           if (!next.length) throw new Error('AI 没有返回可用的歌词时间轴');
           state.lines = next; state.selectedIndex = 0; state.activeIndex = -1; renderEditor();
           els.aiModalBackdrop.classList.add('hidden');
           showToast('AI 对齐完成，可以继续人工微调。', 'success');
         } catch (error) {
+          failed = true;
           setAiModalMessage(`对齐失败：${error.message || '请查看终端日志。'}`, 'error');
           showToast(error.message || 'AI 对齐失败，请查看终端日志。', 'error');
         } finally {
-          els.runAiButton.disabled = !state.aiAvailable; els.cancelAiButton.disabled = false; els.modalProgress.classList.remove('show');
+          els.runAiButton.disabled = !state.aiAvailable; els.cancelAiButton.disabled = false;
+          if (!els.aiModalBackdrop.classList.contains('hidden')) {
+            setAiProgress(failed ? '处理失败，可以检查提示后重试' : '处理完成', false);
+          }
         }
       }
 
@@ -913,6 +1036,7 @@ els.markButton.textContent = '▶ 开始连续打轴';
       els.parseButton.addEventListener('click', () => loadLyricsText(els.lyricsSource.value));
       els.sourceSampleButton.addEventListener('click', () => { els.lyricsSource.value = SAMPLE; showToast('示例歌词已填入，点击解析即可开始。'); });
       els.sampleButton.addEventListener('click', () => { els.lyricsSource.value = SAMPLE; loadLyricsText(SAMPLE, '示例歌词已载入'); });
+      els.clearLyricsButton.addEventListener('click', clearLyrics);
       els.addLineButton.addEventListener('click', () => { state.lines.push({ time: null, text: '新歌词' }); state.selectedIndex = state.lines.length - 1; renderEditor(); setTimeout(() => { const input = els.linesList.querySelector(`[data-index="${state.selectedIndex}"] .lyric-input`); input?.focus(); input?.select(); }, 0); });
       els.markButton.addEventListener('click', toggleMarking);
       els.autoDistributeButton.addEventListener('click', () => {
